@@ -229,8 +229,23 @@ go install github.com/wailsapp/wails/v2/cmd/wails@latest
 安装后确保 `%USERPROFILE%\go\bin` 已加入系统 PATH。国内网络可设置代理后安装：
 
 ```powershell
-$env:HTTP_PROXY="http://127.0.0.1:7890"; $env:HTTPS_PROXY="http://127.0.0.1:7890"; go install github.com/wailsapp/wails/v2/cmd/wails@latest
+$env:HTTP_PROXY="http://127.0.0.1:7890"; $env:HTTPS_PROXY=$env:HTTP_PROXY; go install github.com/wailsapp/wails/v2/cmd/wails@latest
 ```
+
+端口取决于代理软件，把 `7890` 换成实际监听的端口即可：
+
+| 代理软件 | 默认端口 |
+|------|------|
+| Clash / Clash for Windows / Mihomo | `7890` |
+| Clash Verge Rev | `7897` |
+| v2rayN | HTTP `10809`（SOCKS `10808`） |
+| sing-box / Hiddify | `2080` |
+| Netch | `2801` |
+| Shadowsocks-windows | SOCKS `1080` |
+
+端口在软件主界面或设置里能看到；系统代理开启时也可以直接读出来：`(Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings').ProxyServer`。少见的自定义端口同样按这个办法查。
+
+Go 只认 `HTTP_PROXY` / `HTTPS_PROXY` 环境变量（以及 `NO_PROXY`），Windows 的系统代理设置对它无效，所以必须显式设一次；这个变量只在当前 PowerShell 会话里有效。
 
 ### 编译命令
 

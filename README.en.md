@@ -229,8 +229,23 @@ go install github.com/wailsapp/wails/v2/cmd/wails@latest
 Make sure `%USERPROFILE%\go\bin` is on your PATH afterwards. From mainland China you may need a proxy:
 
 ```powershell
-$env:HTTP_PROXY="http://127.0.0.1:7890"; $env:HTTPS_PROXY="http://127.0.0.1:7890"; go install github.com/wailsapp/wails/v2/cmd/wails@latest
+$env:HTTP_PROXY="http://127.0.0.1:7890"; $env:HTTPS_PROXY=$env:HTTP_PROXY; go install github.com/wailsapp/wails/v2/cmd/wails@latest
 ```
+
+The port depends on your proxy client — swap `7890` for whatever it actually listens on:
+
+| Proxy client | Default port |
+|------|------|
+| Clash / Clash for Windows / Mihomo | `7890` |
+| Clash Verge Rev | `7897` |
+| v2rayN | HTTP `10809` (SOCKS `10808`) |
+| sing-box / Hiddify | `2080` |
+| Netch | `2801` |
+| Shadowsocks-windows | SOCKS `1080` |
+
+The client's main window or settings shows the port. With the Windows system proxy enabled you can also read it directly: `(Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings').ProxyServer`. Custom ports work the same way.
+
+Go only reads the `HTTP_PROXY` / `HTTPS_PROXY` environment variables (and `NO_PROXY`). The Windows system proxy setting means nothing to it, so you have to set them explicitly, and they only last for the current PowerShell session.
 
 ### Building
 
