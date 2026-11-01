@@ -1,0 +1,96 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Read version
+        id: version
+        shell: pwsh
+        run: |
+          $match = Select-String -Path version.go -Pattern 'AppVersion = "([^"]+)"'
+          if (-not $match) { throw "AppVersion not found in version.go" }
+          $v = $match.Matches[0].Groups[1].Value
+          "version=$v" >> $env:GITHUB_OUTPUT
+          Write-Host "Muxer $v"
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
+
+      - name: Build
+        id: build
+        shell: pwsh
+        continue-on-error: true
+        env:
+          CGO_ENABLED: 0
+        run: |
+          $date = Get-Date -Format 'yyyy-MM-dd'
+          wails build -ldflags "-H windowsgui -X main.BuildTime=$date" -nsis
+
+      - name: Build without installer
+        if: steps.build.outcome == 'failure'
+        shell: pwsh
+        env:
+          CGO_ENABLED: 0
+        run: |
+          if (Test-Path 'build/bin/Muxer.exe') {
+            Write-Host 'Executable built, installer step failed. Continuing.'
+            exit 0
+          }
+          $date = Get-Date -Format 'yyyy-MM-dd'
+          wails build -ldflags "-H windowsgui -X main.BuildTime=$date"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Muxer-${{ steps.version.outputs.version }}
+          path: |
+            build/bin/Muxer.exe
+            build/bin/Muxer-amd64-installer.exe
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: Muxer ${{ steps.version.outputs.version }}
+          make_latest: true
+          body: |
+            Muxer ${{ steps.version.outputs.version }}
+
+            - Windows 10/11 x64
+            - `Muxer.exe` 免安装，`Muxer-amd64-installer.exe` 为安装包（含创建快捷方式与卸载项）
+            - 首次运行需要本机已有 WebView2 运行时，Windows 11 自带
+
+            Commit: ${{ github.sha }}
+          files: |
+            build/bin/Muxer.exe
+            build/bin/Muxer-amd64-installer.exe
+          fail_on_unmatched_files: false

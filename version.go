@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	AppVersion = "1.6.56"
+	AppVersion = "1.6.57"
 	BuildTime  = "2026年11月1日"
 )
 

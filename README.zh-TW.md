@@ -12,7 +12,7 @@
 
 ## 下載
 
-程式請以本專案的 Releases 為準：<https://github.com/MuxerGUI/Muxer/releases>。想自己出包的話，照[建置與執行](#建置與執行)編譯即可。
+程式請以本專案的 Releases 為準：<https://github.com/MuxerGUI/Muxer/releases>。每次推送 `main`，GitHub Actions 會自動建置並更新該 Release 裡的 `Muxer.exe`（免安裝）與安裝檔。想在本機出包的話，照[建置與執行](#建置與執行)編譯即可。
 
 網路硬碟裡的是早期版本，功能與介面都落後於專案，僅供留存；教學、使用說明、模型說明、FFmpeg 建置與 WhisperX 模型仍放在網路硬碟，四個入口任選一個：
 
@@ -321,6 +321,7 @@ Muxer/
 │   │   └── style.css
 │   ├── wailsjs/         # Go→JS 繫結（自動產生）
 │   └── dist/            # Vite 建置產物
+├── .github/workflows/   # GitHub Actions：推送 main 自動建置 exe 並更新 Release
 ├── README.md            # 簡體中文說明
 ├── README.zh-TW.md      # 繁體中文說明
 ├── README.en.md         # English documentation

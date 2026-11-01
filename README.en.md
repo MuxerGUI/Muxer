@@ -12,7 +12,7 @@ Project: <https://github.com/MuxerGUI/Muxer> · License: [MIT](LICENSE)
 
 ## Download
 
-Grab builds from this repository's Releases page: <https://github.com/MuxerGUI/Muxer/releases>. If you would rather produce your own, follow [Build & Run](#build--run).
+Grab builds from this repository's Releases page: <https://github.com/MuxerGUI/Muxer/releases>. Every push to `main` triggers GitHub Actions to build and refresh the `Muxer.exe` (portable) and installer attached to that Release. To produce your own build locally, follow [Build & Run](#build--run).
 
 The copies on the cloud drives are older builds that trail the repo in both features and UI, kept only as an archive. The walkthrough, user guide, model notes, the FFmpeg build, and the WhisperX models still live there — any one of these four links will do:
 
@@ -321,6 +321,7 @@ Muxer/
 │   │   └── style.css
 │   ├── wailsjs/         # Go→JS bindings (generated)
 │   └── dist/            # Vite build output
+├── .github/workflows/   # GitHub Actions: builds the exe and updates the Release on every push to main
 ├── README.md            # 简体中文说明
 ├── README.zh-TW.md      # 繁體中文說明
 ├── README.en.md         # English documentation
