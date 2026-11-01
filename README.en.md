@@ -364,7 +364,7 @@ The app can play a sound at key moments. **This is optional**: no audio ships wi
 - **Failed or cancelled jobs delete their half-written output automatically**; the `.error.log` is kept separately for troubleshooting
 - **Container index repair** — if the encoder dies during finalization it may write every frame but never the index (`Cues`/`Duration`), which makes players and cloud drives stall when seeking. The app automatically remuxes with `-c copy` to restore the index: **container only, no re-encode**, so burned-in subtitles stay pixel-identical, and MP4 output keeps `+faststart`. If the repair fails, the source is kept for inspection
 - **The web copy (`.在线版.mp4`) must also report a readable duration** — master and web copy come from the same command, so an abnormal exit can leave the web copy without a usable `moov`. Such a file looks perfectly normal by size, which is why the web copy is additionally required to report a duration; if it can't, the source is kept
-- Subtitle filenames may contain `[zmk.pw]`, commas, spaces, and the like — no manual renaming needed
+- Subtitle filenames may contain bracketed tags, commas, spaces, and the like — no manual renaming needed
 - Embedded subtitle extraction **prefers text tracks** and skips PGS/VobSub bitmap tracks unless the file has nothing else
 - WhisperX runs locally, so Settings needs a conda environment's `python.exe` and a **model directory**. The default is `E:\MuxerModels`, and you can mount a directory of pre-downloaded models instead (see the `模型说明.md` in the cloud-drive bundle)
 
