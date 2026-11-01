@@ -14,6 +14,8 @@ Project: <https://github.com/MuxerGUI/Muxer> · License: [MIT](LICENSE)
 
 Grab builds from this repository's Releases page: <https://github.com/MuxerGUI/Muxer/releases>. Every push to `main` triggers GitHub Actions to build and refresh the `Muxer.exe` (portable) and installer attached to that Release. To produce your own build locally, follow [Build & Run](#build--run).
 
+Direct link to the portable build (always the newest one): <https://github.com/MuxerGUI/Muxer/releases/latest/download/Muxer.exe>
+
 The copies on the cloud drives are older builds that trail the repo in both features and UI, kept only as an archive. The walkthrough, user guide, model notes, the FFmpeg build, and the WhisperX models still live there — any one of these four links will do:
 
 | Drive | Link | Access code |

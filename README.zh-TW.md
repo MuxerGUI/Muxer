@@ -14,6 +14,8 @@
 
 程式請以本專案的 Releases 為準：<https://github.com/MuxerGUI/Muxer/releases>。每次推送 `main`，GitHub Actions 會自動建置並更新該 Release 裡的 `Muxer.exe`（免安裝）與安裝檔。想在本機出包的話，照[建置與執行](#建置與執行)編譯即可。
 
+免安裝版直連（永遠指向最新一次建置）：<https://github.com/MuxerGUI/Muxer/releases/latest/download/Muxer.exe>
+
 網路硬碟裡的是早期版本，功能與介面都落後於專案，僅供留存；教學、使用說明、模型說明、FFmpeg 建置與 WhisperX 模型仍放在網路硬碟，四個入口任選一個：
 
 | 網路硬碟 | 連結 | 提取碼 |

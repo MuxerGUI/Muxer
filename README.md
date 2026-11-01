@@ -14,6 +14,8 @@
 
 程序以本仓库的 Releases 为准：<https://github.com/MuxerGUI/Muxer/releases>。每次推送 `main`，GitHub Actions 会自动构建并更新该 Release 里的 `Muxer.exe`（免安装）与安装包。需要在本机出包的话，按[构建与运行](#构建与运行)编译即可。
 
+免安装版直链（始终指向最新一次构建）：<https://github.com/MuxerGUI/Muxer/releases/latest/download/Muxer.exe>
+
 网盘里的程序是早期版本，功能与界面都落后于仓库，仅作留档；教程、使用说明、模型说明、FFmpeg 构建与 WhisperX 模型仍放在网盘，四个入口任选其一：
 
 | 网盘 | 链接 | 提取码 |
