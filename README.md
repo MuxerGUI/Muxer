@@ -25,7 +25,9 @@
 
 `MuxerModels` 是 WhisperX 用的模型缓存：识别模型 `large-v3`（约 3 GB，所有语种共用）加上各语种的对齐模型，全量约 **76 GB**，不必下全。
 
-- 只需下载你要处理的语种。对齐模型按语种独立，单个多在 1.2–3.6 GB（中文 2.4 GB、日文 2.4 GB），只做中文字幕的话 `large-v3` 加中文对齐模型共约 5.3 GB 就够
+- 只需下载你要处理的语种。对齐模型按语种独立，单个多在 1.2–3.6 GB
+- 中文简体与繁体共用同一个 `zh` 模型（约 2.4 GB），不用分两份；中文字幕通常是中外文混排，`zh` 与 `en` 一并下更稳，`en` 只有约 0.35 GB。这样 `large-v3` + `zh` + `en` 合计约 5.6 GB
+- 只做英文的话下 `en` 一份就够，不必带中文模型
 - 程序运行时处于离线模式，不会自己联网补模型，缺哪个语种就用 `scripts/download_align_models.py` 补哪个：`python download_align_models.py E:\MuxerModels zh en ja`，不带语种参数则下载全部
 - 目录内应保持 `huggingface` 与 `torch` 两个子目录的结构，整体放到任意位置后在「设置 → 模型目录」挂载，默认路径 `E:\MuxerModels`
 

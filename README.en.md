@@ -25,7 +25,9 @@ The copies on the cloud drives are older builds that trail the repo in both feat
 
 `MuxerModels` is the WhisperX model cache: the `large-v3` transcription model (about 3 GB, shared by every language) plus per-language alignment models. The full set is roughly **76 GB**, and there is no reason to take all of it.
 
-- Take only the languages you actually work with. Alignment models are per language and most weigh 1.2–3.6 GB each (Chinese 2.4 GB, Japanese 2.4 GB). A Chinese-only setup needs about 5.3 GB in total: `large-v3` plus the Chinese alignment model
+- Take only the languages you actually work with. Alignment models are per language and most weigh 1.2–3.6 GB each
+- Simplified and Traditional Chinese share the same `zh` model (about 2.4 GB), so there is no need to grab two. Chinese subtitles usually mix in English, so pulling `zh` and `en` together works best, and `en` is only about 0.35 GB — that puts `large-v3` + `zh` + `en` at roughly 5.6 GB
+- If you only work in English, `en` on its own is enough; skip the Chinese model
 - The app runs in offline mode and never fetches missing models on its own. Add a language with `scripts/download_align_models.py` whenever you need one: `python download_align_models.py E:\MuxerModels zh en ja`. Run it with no language arguments to pull everything
 - Keep the `huggingface` and `torch` subdirectories intact, drop the folder anywhere, then mount it under Settings → model directory; the default path is `E:\MuxerModels`
 
