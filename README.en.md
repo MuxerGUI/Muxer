@@ -12,7 +12,9 @@ Project: <https://github.com/MuxerGUI/Muxer> · License: [MIT](LICENSE)
 
 ## Download
 
-The app itself, the walkthrough, the user guide, model notes, an FFmpeg build, and the WhisperX models (`MuxerModels`, by far the largest item) are all hosted on Chinese cloud drives. Any one of these four links will do:
+Grab builds from this repository's Releases page: <https://github.com/MuxerGUI/Muxer/releases>. If you would rather produce your own, follow [Build & Run](#build--run).
+
+The copies on the cloud drives are older builds that trail the repo in both features and UI, kept only as an archive. The walkthrough, user guide, model notes, the FFmpeg build, and the WhisperX models still live there — any one of these four links will do:
 
 | Drive | Link | Access code |
 |-------|------|-------------|
@@ -21,7 +23,13 @@ The app itself, the walkthrough, the user guide, model notes, an FFmpeg build, a
 | Quark Pan | [Mirror 3](https://pan.quark.cn/s/3e11a7385037?pwd=nbGp) | `nbGp` |
 | Quark Pan | [Mirror 4](https://pan.quark.cn/s/7bc33fa63771) | none |
 
-`MuxerModels` holds the WhisperX alignment models (several GB). Unpack it anywhere and mount that folder under Settings → model directory; the default path is `E:\MuxerModels`. The `模型说明.md` included with the download has the details.
+`MuxerModels` is the WhisperX model cache: the `large-v3` transcription model (about 3 GB, shared by every language) plus per-language alignment models. The full set is roughly **76 GB**, and there is no reason to take all of it.
+
+- Take only the languages you actually work with. Alignment models are per language and most weigh 1.2–3.6 GB each (Chinese 2.4 GB, Japanese 2.4 GB). A Chinese-only setup needs about 5.3 GB in total: `large-v3` plus the Chinese alignment model
+- The app runs in offline mode and never fetches missing models on its own. Add a language with `scripts/download_align_models.py` whenever you need one: `python download_align_models.py E:\MuxerModels zh en ja`. Run it with no language arguments to pull everything
+- Keep the `huggingface` and `torch` subdirectories intact, drop the folder anywhere, then mount it under Settings → model directory; the default path is `E:\MuxerModels`
+
+The `模型说明.md` shipped with the drive bundle has the details.
 
 ---
 
@@ -158,7 +166,7 @@ A burn-in watermark job that runs independently of the muxing pipeline (branding
 
 > - Speech-to-subtitle (Qwen ASR) and AI subtitle processing (DeepSeek / GLM, selected by `aiProvider`) call cloud APIs and need keys for DeepSeek or GLM / DashScope (Qwen) / Alibaba OSS. All keys are read from `keys.json` next to the executable (see [Configuration](#configuration-keysjson) below); features prompt for input when something is missing.
 > - DeepSeek's sampling temperature runs `0~2` while GLM's runs `0~1`. The app converts for you, so there's nothing to adjust. GLM's thinking mode is always on and can't be disabled.
-> - WhisperX runs **locally** and needs your own GPU and conda environment. Model directory priority: **Settings page → `modelDir` in `keys.json` → `E:\MuxerModels` → the system cache**. You can mount a directory of pre-downloaded models (see the `模型说明.md` bundled with the cloud-drive release).
+> - WhisperX runs **locally** and needs your own GPU and conda environment. Model directory priority: **Settings page → `modelDir` in `keys.json` → `E:\MuxerModels` → the system cache**. You can mount a directory of pre-downloaded models (see the `模型说明.md` in the cloud-drive bundle).
 > - Temporary audio extracted for any engine is written next to the **source video** and deleted when the job ends, so it never fills up the system temp drive.
 
 ---
@@ -343,7 +351,7 @@ The app can play a sound at key moments. **This is optional**: no audio ships wi
 - **The web copy (`.在线版.mp4`) must also report a readable duration** — master and web copy come from the same command, so an abnormal exit can leave the web copy without a usable `moov`. Such a file looks perfectly normal by size, which is why the web copy is additionally required to report a duration; if it can't, the source is kept
 - Subtitle filenames may contain `[zmk.pw]`, commas, spaces, and the like — no manual renaming needed
 - Embedded subtitle extraction **prefers text tracks** and skips PGS/VobSub bitmap tracks unless the file has nothing else
-- WhisperX runs locally, so Settings needs a conda environment's `python.exe` and a **model directory**. The default is `E:\MuxerModels`, and you can mount a directory of pre-downloaded models instead (see the `模型说明.md` bundled with the cloud-drive release)
+- WhisperX runs locally, so Settings needs a conda environment's `python.exe` and a **model directory**. The default is `E:\MuxerModels`, and you can mount a directory of pre-downloaded models instead (see the `模型说明.md` in the cloud-drive bundle)
 
 ---
 

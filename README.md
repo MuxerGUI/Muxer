@@ -12,7 +12,9 @@
 
 ## 下载
 
-程序本体、功能教程、使用说明、模型说明、FFmpeg 构建以及 WhisperX 模型（`MuxerModels`，体积最大）都放在网盘。四个入口任选其一：
+程序以本仓库的 Releases 为准：<https://github.com/MuxerGUI/Muxer/releases>。需要自己出包的话，按[构建与运行](#构建与运行)编译即可。
+
+网盘里的程序是早期版本，功能与界面都落后于仓库，仅作留档；教程、使用说明、模型说明、FFmpeg 构建与 WhisperX 模型仍放在网盘，四个入口任选其一：
 
 | 网盘 | 链接 | 提取码 |
 |------|------|--------|
@@ -21,7 +23,13 @@
 | 夸克网盘 | [入口三](https://pan.quark.cn/s/3e11a7385037?pwd=nbGp) | `nbGp` |
 | 夸克网盘 | [入口四](https://pan.quark.cn/s/7bc33fa63771) | 无 |
 
-`MuxerModels` 是 WhisperX 的对齐模型（数 GB），解压到任意目录后在「设置 → 模型目录」挂载即可，默认路径为 `E:\MuxerModels`，详见包内的 `模型说明.md`。
+`MuxerModels` 是 WhisperX 用的模型缓存：识别模型 `large-v3`（约 3 GB，所有语种共用）加上各语种的对齐模型，全量约 **76 GB**，不必下全。
+
+- 只需下载你要处理的语种。对齐模型按语种独立，单个多在 1.2–3.6 GB（中文 2.4 GB、日文 2.4 GB），只做中文字幕的话 `large-v3` 加中文对齐模型共约 5.3 GB 就够
+- 程序运行时处于离线模式，不会自己联网补模型，缺哪个语种就用 `scripts/download_align_models.py` 补哪个：`python download_align_models.py E:\MuxerModels zh en ja`，不带语种参数则下载全部
+- 目录内应保持 `huggingface` 与 `torch` 两个子目录的结构，整体放到任意位置后在「设置 → 模型目录」挂载，默认路径 `E:\MuxerModels`
+
+详见网盘包内的 `模型说明.md`。
 
 ---
 
@@ -158,7 +166,7 @@
 
 > - 语音转字幕（千问 ASR）与 AI 字幕处理（DeepSeek / GLM，随 `aiProvider` 切换）走云端 API，需要 DeepSeek 或 GLM / DashScope（千问）/ 阿里云 OSS 的 Key。密钥统一从程序目录的 `keys.json` 读取（见下方「配置文件 keys.json」），未配置时相关功能会提示填写。
 > - DeepSeek 的采样温度量程为 `0~2`，GLM 为 `0~1`，程序内部已按厂商换算，无需手动调整。GLM 的思考模式固定开启，无法关闭。
-> - WhisperX 为**本地**引擎，需自备 GPU 与 conda 环境；模型缓存目录优先级：**设置页「模型目录」> `keys.json` 的 `modelDir` > `E:\MuxerModels` > 系统默认缓存**，可挂载预先下载好的模型目录（清单见网盘分享版附带的 `模型说明.md`）。
+> - WhisperX 为**本地**引擎，需自备 GPU 与 conda 环境；模型缓存目录优先级：**设置页「模型目录」> `keys.json` 的 `modelDir` > `E:\MuxerModels` > 系统默认缓存**，可挂载预先下载好的模型目录（清单见网盘内的 `模型说明.md`）。
 > - 各引擎提取给模型的临时音频统一写入**输入视频所在目录**，处理完即删，不占 C 盘 Temp。
 
 ---
@@ -343,7 +351,7 @@ Muxer/
 - **在线版（`.在线版.mp4`）同样校验可读时长**：母版与在线版由同一条命令产出，收尾异常时在线版可能缺 `moov` 无法播放。这种文件体积看着正常，所以在线版额外要求能读到时长；不合格就保留源片
 - 字幕文件名可以带 `[zmk.pw]`、逗号、空格等符号，无需手动改写
 - 内封字幕提取会**优先取文本轨**（跳过 PGS/VobSub 图形轨），仅在整片只有图形字幕时才提取图形轨
-- WhisperX 为本地引擎，需在「设置」配置 conda 环境 `python.exe` 与**模型目录**；模型目录默认 `E:\MuxerModels`，也可在设置页挂载预先下载好的模型（清单见网盘分享版附带的 `模型说明.md`）
+- WhisperX 为本地引擎，需在「设置」配置 conda 环境 `python.exe` 与**模型目录**；模型目录默认 `E:\MuxerModels`，也可在设置页挂载预先下载好的模型（清单见网盘内的 `模型说明.md`）
 
 ---
 
