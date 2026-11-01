@@ -1,0 +1,1221 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Muxer</title>
+  <link rel="stylesheet" href="./src/style.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="header">
+      <span class="header-title">Muxer</span>
+      <span class="header-sub">视频字幕封装工具</span>
+      <button id="themeToggle" class="btn-theme" onclick="toggleTheme()" title="切换主题">☀</button>
+    </header>
+
+    <nav class="tab-nav">
+      <button class="tab-btn active" onclick="switchTab('mux')">封装</button>
+      <button class="tab-btn" onclick="switchTab('tools')">工具</button>
+      <button class="tab-btn" onclick="switchTab('subtitle')">字幕</button>
+      <button class="tab-btn" onclick="switchTab('watermark')">水印</button>
+      <button class="tab-btn" onclick="switchTab('dedup')">去重</button>
+      <button class="tab-btn" id="queueTabBtn" onclick="switchTab('queue')">队列 <span id="queueBadge" class="queue-badge hidden">0</span></button>
+      <button class="tab-btn" onclick="switchTab('settings')">设置</button>
+      <button class="tab-btn" onclick="switchTab('history')">历史</button>
+    </nav>
+
+    <div id="tab-mux" class="tab-content active">
+      <div class="tab-scroll">
+
+        <section class="card" id="dropZone">
+          <div class="field">
+            <label class="label">输入目录</label>
+            <div class="input-row">
+              <input id="inputDir" class="input" type="text" placeholder="包含视频和字幕的目录（可拖拽文件夹）" readonly />
+              <button class="btn btn-secondary" onclick="selectInput()">浏览</button>
+              <button class="btn btn-ai" id="analyzeNamesBtn" onclick="analyzeFilenames()" title="使用 AI 分析目录中的视频/字幕文件名，识别集数并给出规范化建议">分析</button>
+            </div>
+          </div>
+          <div id="filenameAnalysisPanel" class="hidden">
+            <div class="analysis-header">
+              <span id="analysisSummary"></span>
+              <span id="analysisIssueTag" class="analysis-issue-tag hidden"></span>
+              <button class="analysis-close-btn" onclick="closeFilenameAnalysis()">x</button>
+            </div>
+            <div id="analysisIssueDetail" class="analysis-issue-detail hidden"></div>
+            <div class="analysis-table-wrap">
+              <table class="analysis-table">
+                <thead>
+                  <tr>
+                    <th>视频文件</th>
+                    <th>匹配字幕</th>
+                    <th>集数</th>
+                    <th>建议输出名（可编辑）</th>
+                    <th>置信度</th>
+                    <th>备注</th>
+                  </tr>
+                </thead>
+                <tbody id="analysisTableBody"></tbody>
+              </table>
+            </div>
+            <div class="analysis-footer">
+              <button class="btn btn-primary btn-sm" id="applyRenameBtn" onclick="applyFilenameRenames()" style="display:none">应用重命名</button>
+              <span id="applyRenameStatus" class="analysis-rename-status"></span>
+            </div>
+          </div>
+          <div class="field">
+            <label class="label">输出目录</label>
+            <div class="input-row">
+              <input id="outputDir" class="input" type="text" placeholder="封装完成后保存到此目录" readonly />
+              <button class="btn btn-secondary" onclick="selectOutput()">浏览</button>
+            </div>
+            <div class="field-hint" id="diskUsageHint" style="margin-top:4px"></div>
+          </div>
+        </section>
+
+        <section class="card" style="padding:0;overflow:hidden">
+          <div class="preset-bar">
+            <span class="preset-label">快捷方案</span>
+            <button class="preset-btn preset-soft"  onclick="applyPreset('soft')"  title="软封装：不重编码，字幕作为独立轨道，零画质损失">软封推荐</button>
+            <button class="preset-btn preset-4k"    onclick="applyPreset('4k')"    title="H.265 · CPU · CRF 18 · slow · 原始分辨率，适合 4K 存档">4K 高质量</button>
+            <button class="preset-btn preset-1080p" onclick="applyPreset('1080p')" title="H.265 · CPU · CRF 22 · medium · 1080p，兼顾画质与文件大小">1080p 标准</button>
+            <button class="preset-btn preset-fast"  onclick="applyPreset('fast')"  title="H.264 · NVIDIA/AMD GPU 优先 · CRF 22 · fast · 1080p，速度最快">快速出片</button>
+            <button class="preset-btn preset-qsv-fast" onclick="applyPreset('fast_qsv_original')" title="H.264 · Intel QSV（集成显卡） · CRF 22 · fast · 原始分辨率（不缩放），适合集成显卡">核显专用</button>
+            <button class="preset-btn preset-nvenc-h265" onclick="applyPreset('nvenc_h265')" title="H.264 · NVIDIA NVENC · CQ自适应 · fast · 1080p/原始，独显高效压制">独显高效</button>
+          </div>
+          <div class="preset-bar" id="customPresetBar" style="padding-top:0">
+            <span class="preset-label">我的方案</span>
+            <span id="customPresetList" style="display:contents"></span>
+            <button class="btn btn-ghost btn-sm" onclick="saveCustomPreset()" title="把当前全部编码参数存为一个方案">＋ 存为方案</button>
+            <button class="btn btn-ghost btn-sm" onclick="exportCustomPresets()" title="导出为 JSON 文件">导出</button>
+            <button class="btn btn-ghost btn-sm" onclick="importCustomPresets()" title="从 JSON 文件导入">导入</button>
+          </div>
+          <div class="options-grid" style="padding:10px 12px 0">
+            <div class="field field-row">
+              <label class="label">封装模式</label>
+              <div class="radio-group">
+                <label class="radio-label"><input type="radio" name="mode" value="soft" checked onchange="onModeChange()" />软封</label>
+                <label class="radio-label"><input type="radio" name="mode" value="hard" onchange="onModeChange()" />硬压</label>
+              </div>
+            </div>
+            <div class="field field-row">
+              <label class="label">输出格式</label>
+              <div class="radio-group">
+                <label class="radio-label"><input type="radio" name="format" value="mkv" checked onchange="onFormatChange()" />MKV</label>
+                <label class="radio-label"><input type="radio" name="format" value="mp4" onchange="onFormatChange()" />MP4</label>
+              </div>
+            </div>
+            <div class="field field-row" id="offsetRow">
+              <label class="label">字幕偏移</label>
+              <div class="input-row-inline">
+                <input id="subtitleOffset" class="input input-sm" type="number" value="0" step="0.5" min="-600" max="600" />
+                <span class="unit-label">秒</span>
+              </div>
+            </div>
+            <div class="field field-row">
+              <label class="label">音频轨道</label>
+              <select id="audioTrack" class="select">
+                <option value="-1">全部保留</option>
+              </select>
+            </div>
+            <div class="field field-row">
+              <label class="label">音轨延迟</label>
+              <div class="input-row-inline">
+                <input id="audioDelay" class="input input-sm" type="number" value="0" step="50" min="-60000" max="60000" />
+                <span class="unit-label">毫秒</span>
+              </div>
+            </div>
+            <div class="field field-row">
+              <label class="label">文件名模板</label>
+              <input id="filenameTmpl" class="input" type="text" placeholder="{name}.中英字幕" />
+            </div>
+          </div>
+
+          <div id="softOptions" class="field field-row" style="padding:0 12px 10px;gap:14px;flex-wrap:wrap">
+            <label class="label">高级</label>
+            <label class="checkbox-label"><input type="checkbox" id="keepOriginalSubs" />保留原片字幕轨</label>
+            <label class="checkbox-label"><input type="checkbox" id="chkMultiSub" />自动合并多字幕轨</label>
+          </div>
+
+          <div id="av1Hint" class="field-hint hidden" style="padding:0 12px 6px;color:var(--tab-accent)">
+            AV1 · CPU 需要 FFmpeg 包含 libsvtav1；GPU 需要 RTX 30+ / Intel Arc。预设编码速度映射为 SVT-AV1 整数级（0–12）。
+          </div>
+          <div id="hardsubOptions" class="field field-row hidden" style="padding:0 12px 10px">
+            <label class="label">硬压参数</label>
+            <div class="param-row">
+              <div class="param-item">
+                <span class="param-label">编码格式</span>
+                <select id="codecSelect" class="select" onchange="onCodecChange()">
+                  <option value="h264">H.264</option>
+                  <option value="h265">H.265</option>
+                  <option value="av1">AV1</option>
+                </select>
+              </div>
+              <div class="param-item">
+                <span class="param-label">编码器</span>
+                <select id="encoderSelect" class="select">
+                  <option value="cpu">CPU · x264/x265</option>
+                  <option value="nvenc">NVIDIA · NVENC</option>
+                  <option value="amf">AMD · AMF</option>
+                  <option value="qsv">Intel · QSV</option>
+                </select>
+              </div>
+              <div class="param-item">
+                <span class="param-label">CRF/CQ 画质</span>
+                <select id="crfSelect" class="select">
+                  <option value="16">16</option>
+                  <option value="18">18</option>
+                  <option value="20">20</option>
+                  <option value="22" selected>22</option>
+                  <option value="23">23</option>
+                  <option value="24">24</option>
+                  <option value="26">26</option>
+                  <option value="28">28</option>
+                  <option value="29">29</option>
+                  <option value="30">30</option>
+                  <option value="31">31</option>
+                  <option value="32">32</option>
+                </select>
+              </div>
+              <div class="param-item">
+                <span class="param-label">编码速度</span>
+                <select id="presetSelect" class="select">
+                  <option value="faster">faster</option>
+                  <option value="fast">fast</option>
+                  <option value="medium">medium</option>
+                  <option value="slow" selected>slow</option>
+                  <option value="slower">slower</option>
+                  <option value="veryslow">veryslow</option>
+                </select>
+              </div>
+              <div class="param-item">
+                <span class="param-label">缩放输出</span>
+                <select id="scaleSelect" class="select">
+                  <option value="0">原始分辨率</option>
+                  <option value="1080">1080p</option>
+                  <option value="720">720p</option>
+                  <option value="480">480p</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div id="webVersionRow" class="field hidden" style="padding:0 12px 10px">
+            <label class="checkbox-label">
+              <input type="checkbox" id="chkWebVersion" onchange="onWebVersionChange()" />
+              在线版
+            </label>
+            <div id="webVersionOptions" style="display:none;margin-top:6px">
+              <div class="param-row">
+                <div class="param-item">
+                  <span class="param-label">在线版码率</span>
+                  <div class="input-row-inline">
+                    <input id="webBitrate" class="input input-sm" type="number" value="" step="500" min="0" max="30000" placeholder="自动" />
+                    <span class="unit-label">kbps</span>
+                  </div>
+                </div>
+                <div class="param-item">
+                  <span class="param-label">在线版编码</span>
+                  <select id="webCodec" class="select">
+                    <option value="h265">H.265</option>
+                    <option value="h264">H.264</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="card" style="padding:0;overflow:hidden">
+          <div class="adv-toggle" onclick="toggleAdvanced()">
+            <span id="advIcon" class="adv-icon">▶</span>
+            高级参数
+          </div>
+          <div id="advPanel" class="adv-panel hidden">
+            <div class="field field-row" id="advTenBitRow" style="padding:6px 14px 0">
+              <label class="label">色深</label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="chkTenBit" />
+                10-bit 输出
+              </label>
+            </div>
+            <div class="field field-row" id="advHDRRow" style="padding:6px 14px 0">
+              <label class="label">HDR</label>
+              <label class="checkbox-label"><input type="checkbox" id="chkHDR" />HDR 透传</label>
+              <label class="checkbox-label"><input type="checkbox" id="chkHDR2SDR" />HDR→SDR</label>
+              <label class="checkbox-label"><input type="checkbox" id="chkStripDV" />剥离杜比视界</label>
+            </div>
+            <div class="field field-row hidden" id="advCropRow" style="padding:6px 14px 0">
+              <label class="label">裁黑边</label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="chkAutoCrop" />
+                自动检测并裁切黑边
+              </label>
+            </div>
+            <div class="field field-row" style="padding:6px 14px 0">
+              <label class="label">字幕样式</label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="chkKeepSubStyle" onchange="onKeepSubStyleChange(this)" />
+                保留原字幕样式
+              </label>
+            </div>
+            <div class="field field-row" style="padding:6px 14px 0">
+              <label class="label">音频码率</label>
+              <select id="audioBitrate" class="select" style="width:auto">
+                <option value="128k">128k</option>
+                <option value="192k" selected>192k</option>
+                <option value="256k">256k</option>
+                <option value="320k">320k</option>
+              </select>
+            </div>
+            <div class="field field-row" style="padding:6px 14px 10px">
+              <label class="label">附加参数</label>
+              <input id="extraArgs" class="input" type="text"
+                placeholder='追加到 ffmpeg 命令，如 -metadata title="My Video" -map_metadata 0' />
+            </div>
+          </div>
+        </section>
+
+        <section class="card card-inline">
+          <label class="checkbox-label"><input type="checkbox" id="chkNotify" />完成后通知</label>
+          <label class="checkbox-label"><input type="checkbox" id="chkOpenOutput" />完成后打开目录</label>
+          <label class="checkbox-label" title="完成后执行 shutdown /s /t 60，60秒内可 shutdown /a 取消"><input type="checkbox" id="chkShutdown" />完成后关机</label>
+          <label class="checkbox-label"><input type="checkbox" id="chkNormalize" />音量标准化</label>
+          <label id="embedFontsRow" class="checkbox-label hidden"><input type="checkbox" id="chkEmbedFonts" />嵌入字体</label>
+        </section>
+
+        <div class="action-row">
+          <button id="startBtn" class="btn btn-primary" onclick="startProcess()">开始处理</button>
+          <button id="stopBtn" class="btn btn-danger hidden" onclick="stopProcess()">停止</button>
+          <button class="btn btn-secondary" onclick="addCurrentToQueue()" title="将当前设置加入任务队列，稍后批量执行">加入队列</button>
+          <button id="previewBtn" class="btn btn-secondary" onclick="previewCompress()" title="截取中间 15 秒，按当前参数试压缩，预估输出大小">试算预览</button>
+          <button class="btn btn-secondary" onclick="generateSubtitlePreview()" title="按字幕时间轴抽样生成带字幕截图和中文报告，输出到当前输出目录">字幕预览</button>
+          <button class="btn btn-secondary" onclick="extractSubs()">提取字幕</button>
+          <button class="btn btn-ghost" onclick="clearLog()">清空日志</button>
+        </div>
+
+        <div id="previewPanel" class="preview-panel hidden">
+          <div class="preview-header">
+            <span class="preview-title">试算结果</span>
+            <button class="btn btn-ghost btn-sm" onclick="closePreview()">✕ 关闭</button>
+          </div>
+          <div class="preview-stats" id="previewStats"></div>
+          <div class="preview-shots" id="previewShots"></div>
+        </div>
+
+        <div id="progressBar" class="progress-bar hidden">
+          <div id="progressFill" class="progress-fill" style="width:0%"></div>
+          <span id="progressText" class="progress-text"></span>
+        </div>
+
+        <div class="log-panel">
+          <div class="log-header"><span>日志</span></div>
+          <div id="logArea" class="log-area"></div>
+        </div>
+
+      </div>
+    </div>
+
+    <div id="tab-tools" class="tab-content">
+      <div class="tab-scroll tools-scroll">
+
+        <section class="card">
+          <div class="tool-section-title">视频信息查看</div>
+          <div class="field">
+            <div class="input-row">
+              <input id="infoInputDir" class="input" type="text" placeholder="选择包含视频的目录" readonly />
+              <button class="btn btn-secondary" onclick="selectInfoDir()">浏览</button>
+              <button class="btn btn-primary" onclick="showVideoInfo()">查看</button>
+            </div>
+          </div>
+          <div id="videoInfoPanel" class="info-panel hidden">
+            <div class="info-grid" id="infoGrid"></div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="tool-section-title">字幕格式转换</div>
+          <div class="field">
+            <div class="input-row">
+              <input id="subConvertFile" class="input" type="text" placeholder="选择字幕文件" readonly />
+              <button class="btn btn-secondary" onclick="selectSubFile()">选择文件</button>
+              <button class="btn btn-primary" onclick="convertSub()">转换</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="tool-section-title">批量字幕转换</div>
+          <div class="field">
+            <div class="input-row">
+              <input id="batchSubDir" class="input" type="text" placeholder="选择包含字幕文件的目录" readonly />
+              <button class="btn btn-secondary" onclick="selectBatchSubDir()">浏览</button>
+            </div>
+          </div>
+          <div class="field field-row">
+            <label class="label">目标格式</label>
+            <div class="radio-group">
+              <label class="radio-label"><input type="radio" name="batchSubFmt" value="srt" checked />转为 SRT</label>
+              <label class="radio-label"><input type="radio" name="batchSubFmt" value="ass" />转为 ASS</label>
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="batchConvertSubs()" style="margin-top:4px">批量转换</button>
+        </section>
+
+        <section class="card">
+          <div class="tool-section-title">字幕质量检查</div>
+          <div class="field">
+            <div class="input-row">
+              <input id="qualitySubFile" class="input" type="text" placeholder="选择 SRT / ASS 字幕文件或目录" readonly />
+              <button class="btn btn-secondary" onclick="selectQualitySubFile()">选择文件</button>
+              <button class="btn btn-secondary" onclick="selectQualitySubDir()">选择目录</button>
+              <button class="btn btn-primary" onclick="checkSubQuality()">检查</button>
+            </div>
+          </div>
+          <div class="input-row" style="margin-top:4px;gap:8px">
+            <button class="btn btn-primary" onclick="convertToCleanSRT()">转为简洁 SRT</button>
+            <button class="btn btn-primary" onclick="fixSubWithAI()">AI 修复字幕</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="tool-section-title">字幕自动翻译</div>
+          <div class="field">
+            <div class="input-row">
+              <input id="transSubFile" class="input" type="text" placeholder="选择 SRT / ASS 字幕文件" readonly />
+              <button class="btn btn-secondary" onclick="selectTransSubFile()">选择文件</button>
+            </div>
+          </div>
+          <div class="field field-row">
+            <label class="label">目标语言</label>
+            <select id="transTargetLang" class="select" style="width:auto">
+              <option value="ZH">中文</option>
+              <option value="EN">英文</option>
+              <option value="JA">日文</option>
+              <option value="KO">韩文</option>
+              <option value="FR">法文</option>
+              <option value="DE">德文</option>
+              <option value="ES">西班牙文</option>
+              <option value="RU">俄文</option>
+            </select>
+          </div>
+          <div class="field field-row">
+            <label class="label">输出模式</label>
+            <div class="radio-group">
+              <label class="radio-label"><input type="radio" name="transMode" value="replace" checked />替换原文</label>
+              <label class="radio-label"><input type="radio" name="transMode" value="bilingual" />追加双语</label>
+            </div>
+          </div>
+          <div class="field field-row">
+            <div class="radio-group" id="transExtraOpts">
+              <label class="radio-label"><input type="checkbox" id="transForceSRT" checked />输出为简洁 SRT</label>
+            </div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="translateSubtitle()" style="margin-top:4px">开始翻译</button>
+        </section>
+
+        <section class="card">
+          <div class="tool-section-title">视频片段裁剪</div>
+          <div class="field">
+            <div class="input-row">
+              <input id="trimFile" class="input" type="text" placeholder="选择视频文件" readonly />
+              <button class="btn btn-secondary" onclick="selectTrimFile()">选择文件</button>
+            </div>
+          </div>
+          <div class="field field-row">
+            <label class="label">起始时间</label>
+            <input id="trimStart" class="input" type="text" value="00:00:00" style="width:100px;flex:none" />
+            <label class="label" style="margin-left:12px">结束时间</label>
+            <input id="trimEnd" class="input" type="text" value="00:01:00" style="width:100px;flex:none" />
+          </div>
+          <div class="field field-row">
+            <label class="label">模式</label>
+            <div class="radio-group">
+              <label class="radio-label"><input type="radio" name="trimMode" value="copy" checked />无损裁剪</label>
+              <label class="radio-label"><input type="radio" name="trimMode" value="reencode" />重编码</label>
+            </div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="trimVideo()" style="margin-top:4px">开始裁剪</button>
+        </section>
+
+        <section class="card">
+          <div class="tool-section-title">视频缩略图网格</div>
+          <div class="field">
+            <div class="input-row">
+              <input id="thumbFile" class="input" type="text" placeholder="选择视频文件" readonly />
+              <button class="btn btn-secondary" onclick="selectThumbFile()">选择文件</button>
+            </div>
+          </div>
+          <div class="field field-row">
+            <label class="label">网格大小</label>
+            <div class="radio-group">
+              <label class="radio-label"><input type="radio" name="thumbGrid" value="4x3" checked />4×3</label>
+              <label class="radio-label"><input type="radio" name="thumbGrid" value="4x4" />4×4</label>
+              <label class="radio-label"><input type="radio" name="thumbGrid" value="5x4" />5×4</label>
+              <label class="radio-label"><input type="radio" name="thumbGrid" value="6x4" />6×4</label>
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="generateThumbs()" style="margin-top:4px">生成缩略图</button>
+        </section>
+
+        <section class="card">
+          <div class="tool-section-title">字幕时间轴偏移</div>
+          <div class="field">
+            <div class="input-row">
+              <input id="shiftSubFile" class="input" type="text" placeholder="选择 SRT / ASS 字幕文件" readonly />
+              <button class="btn btn-secondary" onclick="selectShiftFile()">选择文件</button>
+            </div>
+          </div>
+          <div id="subPreviewPanel" class="sub-preview hidden">
+            <div class="sub-preview-title">字幕预览</div>
+            <div id="subPreviewLines"></div>
+          </div>
+          <div class="field field-row">
+            <label class="label">偏移量</label>
+            <div class="input-row-inline">
+              <input id="shiftOffset" class="input input-sm" type="number" value="0" step="0.1" min="-600" max="600" />
+              <span class="unit-label">秒</span>
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="shiftSub()" style="margin-top:4px">应用偏移</button>
+        </section>
+
+        <section class="card">
+          <div class="tool-section-title">字幕自动同步</div>
+          <div class="field">
+            <label class="label">视频文件</label>
+            <div class="input-row">
+              <input id="syncVideoFile" class="input" type="text" placeholder="选择参考视频文件" readonly />
+              <button class="btn btn-secondary" onclick="selectSyncVideo()">选择</button>
+            </div>
+          </div>
+          <div class="field">
+            <label class="label">字幕文件</label>
+            <div class="input-row">
+              <input id="syncSubFile" class="input" type="text" placeholder="选择需要同步的 SRT / ASS 字幕文件" readonly />
+              <button class="btn btn-secondary" onclick="selectSyncSub()">选择</button>
+            </div>
+          </div>
+          <div class="input-row" style="margin-top:6px;gap:8px">
+            <button class="btn btn-primary" onclick="autoSyncSub()">自动同步</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="tool-section-title">语音转字幕</div>
+          <div class="field">
+            <label class="label">视频 / 音频文件</label>
+            <div class="input-row">
+              <input id="whisperFile" class="input" type="text" placeholder="选择文件或目录（批量）" readonly />
+              <button class="btn btn-secondary" onclick="selectWhisperFile()">选择文件</button>
+              <button class="btn btn-secondary" onclick="selectWhisperDir()">选择目录</button>
+            </div>
+          </div>
+          <div class="field field-row">
+            <label class="label">识别引擎</label>
+            <div class="radio-group">
+              <label class="radio-label"><input type="radio" name="asrEngine" value="whisperx" checked onchange="toggleASREngine()" />WhisperX（本地）</label>
+              <label class="radio-label"><input type="radio" name="asrEngine" value="qwen" onchange="toggleASREngine()" />千问 ASR（云端）</label>
+            </div>
+          </div>
+          <div class="field field-row">
+            <label class="label">语言</label>
+            <div class="lang-dropdown" id="whisperLangDropdown">
+              <div class="lang-dropdown-trigger" id="whisperLangTrigger" onclick="toggleLangDropdown()">
+                <span id="whisperLangLabel">自动检测</span>
+                <span class="lang-dropdown-arrow">▾</span>
+              </div>
+              <div class="lang-dropdown-panel hidden" id="whisperLangPanel">
+                <input class="lang-dropdown-search" id="whisperLangSearch" type="text" placeholder="搜索语言..." oninput="filterLangDropdown(this.value)" />
+                <div class="lang-dropdown-list" id="whisperLangList">
+                  <div class="lang-opt" data-value="auto" onclick="selectLang(this)">自动检测</div>
+                  <div class="lang-group-label">常用</div>
+                  <div class="lang-opt" data-value="zh" onclick="selectLang(this)">中文</div>
+                  <div class="lang-opt" data-value="en" onclick="selectLang(this)">英文</div>
+                  <div class="lang-opt" data-value="ja" onclick="selectLang(this)">日文</div>
+                  <div class="lang-opt" data-value="ko" onclick="selectLang(this)">韩文</div>
+                  <div class="lang-opt" data-value="fr" onclick="selectLang(this)">法文</div>
+                  <div class="lang-opt" data-value="de" onclick="selectLang(this)">德文</div>
+                  <div class="lang-opt" data-value="es" onclick="selectLang(this)">西班牙文</div>
+                  <div class="lang-opt" data-value="ru" onclick="selectLang(this)">俄文</div>
+                  <div class="lang-group-label">东亚 · 东南亚</div>
+                  <div class="lang-opt" data-value="yue" onclick="selectLang(this)">粤语</div>
+                  <div class="lang-opt" data-value="th" onclick="selectLang(this)">泰文</div>
+                  <div class="lang-opt" data-value="vi" onclick="selectLang(this)">越南文</div>
+                  <div class="lang-opt" data-value="id" onclick="selectLang(this)">印尼文</div>
+                  <div class="lang-opt" data-value="ms" onclick="selectLang(this)">马来文</div>
+                  <div class="lang-opt" data-value="km" onclick="selectLang(this)">高棉文</div>
+                  <div class="lang-opt" data-value="lo" onclick="selectLang(this)">老挝文</div>
+                  <div class="lang-opt" data-value="my" onclick="selectLang(this)">缅甸文</div>
+                  <div class="lang-opt" data-value="jw" onclick="selectLang(this)">爪哇文</div>
+                  <div class="lang-opt" data-value="su" onclick="selectLang(this)">巽他文</div>
+                  <div class="lang-group-label">欧洲</div>
+                  <div class="lang-opt" data-value="pt" onclick="selectLang(this)">葡萄牙文</div>
+                  <div class="lang-opt" data-value="it" onclick="selectLang(this)">意大利文</div>
+                  <div class="lang-opt" data-value="nl" onclick="selectLang(this)">荷兰文</div>
+                  <div class="lang-opt" data-value="pl" onclick="selectLang(this)">波兰文</div>
+                  <div class="lang-opt" data-value="uk" onclick="selectLang(this)">乌克兰文</div>
+                  <div class="lang-opt" data-value="sv" onclick="selectLang(this)">瑞典文</div>
+                  <div class="lang-opt" data-value="cs" onclick="selectLang(this)">捷克文</div>
+                  <div class="lang-opt" data-value="ro" onclick="selectLang(this)">罗马尼亚文</div>
+                  <div class="lang-opt" data-value="hu" onclick="selectLang(this)">匈牙利文</div>
+                  <div class="lang-opt" data-value="el" onclick="selectLang(this)">希腊文</div>
+                  <div class="lang-opt" data-value="da" onclick="selectLang(this)">丹麦文</div>
+                  <div class="lang-opt" data-value="fi" onclick="selectLang(this)">芬兰文</div>
+                  <div class="lang-opt" data-value="no" onclick="selectLang(this)">挪威文</div>
+                  <div class="lang-opt" data-value="bg" onclick="selectLang(this)">保加利亚文</div>
+                  <div class="lang-opt" data-value="hr" onclick="selectLang(this)">克罗地亚文</div>
+                  <div class="lang-opt" data-value="sk" onclick="selectLang(this)">斯洛伐克文</div>
+                  <div class="lang-opt" data-value="sl" onclick="selectLang(this)">斯洛文尼亚文</div>
+                  <div class="lang-opt" data-value="et" onclick="selectLang(this)">爱沙尼亚文</div>
+                  <div class="lang-opt" data-value="lv" onclick="selectLang(this)">拉脱维亚文</div>
+                  <div class="lang-opt" data-value="lt" onclick="selectLang(this)">立陶宛文</div>
+                  <div class="lang-opt" data-value="mk" onclick="selectLang(this)">马其顿文</div>
+                  <div class="lang-opt" data-value="ca" onclick="selectLang(this)">加泰罗尼亚文</div>
+                  <div class="lang-opt" data-value="gl" onclick="selectLang(this)">加利西亚文</div>
+                  <div class="lang-opt" data-value="eu" onclick="selectLang(this)">巴斯克文</div>
+                  <div class="lang-opt" data-value="cy" onclick="selectLang(this)">威尔士文</div>
+                  <div class="lang-group-label">南亚 · 中东</div>
+                  <div class="lang-opt" data-value="hi" onclick="selectLang(this)">印地文</div>
+                  <div class="lang-opt" data-value="ar" onclick="selectLang(this)">阿拉伯文</div>
+                  <div class="lang-opt" data-value="tr" onclick="selectLang(this)">土耳其文</div>
+                  <div class="lang-opt" data-value="he" onclick="selectLang(this)">希伯来文</div>
+                  <div class="lang-opt" data-value="fa" onclick="selectLang(this)">波斯文</div>
+                  <div class="lang-opt" data-value="ur" onclick="selectLang(this)">乌尔都文</div>
+                  <div class="lang-opt" data-value="bn" onclick="selectLang(this)">孟加拉文</div>
+                  <div class="lang-opt" data-value="ta" onclick="selectLang(this)">泰米尔文</div>
+                  <div class="lang-opt" data-value="te" onclick="selectLang(this)">泰卢固文</div>
+                  <div class="lang-opt" data-value="kn" onclick="selectLang(this)">卡纳达文</div>
+                  <div class="lang-opt" data-value="ml" onclick="selectLang(this)">马拉雅拉姆文</div>
+                  <div class="lang-opt" data-value="mr" onclick="selectLang(this)">马拉地文</div>
+                  <div class="lang-opt" data-value="gu" onclick="selectLang(this)">古吉拉特文</div>
+                  <div class="lang-opt" data-value="pa" onclick="selectLang(this)">旁遮普文</div>
+                  <div class="lang-opt" data-value="ne" onclick="selectLang(this)">尼泊尔文</div>
+                  <div class="lang-opt" data-value="si" onclick="selectLang(this)">僧伽罗文</div>
+                  <div class="lang-opt" data-value="ps" onclick="selectLang(this)">普什图文</div>
+                  <div class="lang-group-label">其他</div>
+                  <div class="lang-opt" data-value="sw" onclick="selectLang(this)">斯瓦希里文</div>
+                  <div class="lang-opt" data-value="am" onclick="selectLang(this)">阿姆哈拉文</div>
+                  <div class="lang-opt" data-value="ha" onclick="selectLang(this)">豪萨文</div>
+                  <div class="lang-opt" data-value="yo" onclick="selectLang(this)">约鲁巴文</div>
+                  <div class="lang-opt" data-value="ig" onclick="selectLang(this)">伊博文</div>
+                  <div class="lang-opt" data-value="so" onclick="selectLang(this)">索马里文</div>
+                  <div class="lang-opt" data-value="sn" onclick="selectLang(this)">绍纳文</div>
+                  <div class="lang-opt" data-value="af" onclick="selectLang(this)">南非荷兰文</div>
+                  <div class="lang-opt" data-value="az" onclick="selectLang(this)">阿塞拜疆文</div>
+                  <div class="lang-opt" data-value="hy" onclick="selectLang(this)">亚美尼亚文</div>
+                  <div class="lang-opt" data-value="ka" onclick="selectLang(this)">格鲁吉亚文</div>
+                  <div class="lang-opt" data-value="kk" onclick="selectLang(this)">哈萨克文</div>
+                  <div class="lang-opt" data-value="uz" onclick="selectLang(this)">乌兹别克文</div>
+                  <div class="lang-opt" data-value="mn" onclick="selectLang(this)">蒙古文</div>
+                  <div class="lang-opt" data-value="bo" onclick="selectLang(this)">藏文</div>
+                </div>
+              </div>
+              <input type="hidden" id="whisperLang" value="auto" />
+            </div>
+          </div>
+          <div class="field field-row">
+            <label class="label">后处理</label>
+            <label class="checkbox-label"><input type="checkbox" id="chkAsrAiCorrect" checked onchange="onAsrAiCorrectChange(this)" />AI 修正并输出双语</label>
+          </div>
+          <div id="qwenConfigFields" style="display:none;margin-top:8px;gap:6px;flex-direction:column">
+            <div class="field-hint" style="margin-bottom:2px">千问 ASR 需阿里云 DashScope + OSS（上传音频用）。填写后保存在本地浏览器，仅用于调用你自己的账号。</div>
+            <div class="field field-row">
+              <label class="label">DashScope Key</label>
+              <input id="qwenDashKey" class="input" type="password" placeholder="阿里云百炼 DashScope API Key（sk-...）" />
+            </div>
+            <div class="field field-row">
+              <label class="label">OSS AccessKey ID</label>
+              <input id="qwenOssId" class="input" type="text" placeholder="阿里云 OSS AccessKey ID（LTAI...）" />
+            </div>
+            <div class="field field-row">
+              <label class="label">OSS AccessKey Secret</label>
+              <input id="qwenOssSecret" class="input" type="password" placeholder="阿里云 OSS AccessKey Secret" />
+            </div>
+            <div class="field field-row">
+              <label class="label">OSS Bucket</label>
+              <input id="qwenOssBucket" class="input" type="text" placeholder="存储桶名（如 my-asr，留空用 muxer-asr）" />
+            </div>
+            <div class="field field-row">
+              <label class="label">OSS Endpoint</label>
+              <input id="qwenOssEndpoint" class="input" type="text" placeholder="区域端点（如 oss-cn-shanghai.aliyuncs.com）" />
+            </div>
+          </div>
+
+          <div class="input-row" style="margin-top:6px;gap:8px">
+            <button type="button" class="btn btn-primary" onclick="whisperTranscribe()">开始转字幕</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="tool-section-title">音频提取</div>
+          <div class="field field-row">
+            <label class="label">输出格式</label>
+            <div class="radio-group">
+              <label class="radio-label"><input type="radio" name="audioFmt" value="aac" checked />AAC</label>
+              <label class="radio-label"><input type="radio" name="audioFmt" value="flac" />FLAC</label>
+              <label class="radio-label"><input type="radio" name="audioFmt" value="mp3" />MP3</label>
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="extractAudio()" style="margin-top:4px">提取音频</button>
+        </section>
+
+        <section class="card">
+          <div class="tool-section-title">视频截图</div>
+          <div class="field">
+            <div class="input-row">
+              <input id="screenshotFile" class="input" type="text" placeholder="选择视频文件" readonly />
+              <button class="btn btn-secondary" onclick="selectScreenshotFile()">选择文件</button>
+            </div>
+          </div>
+          <div class="field field-row">
+            <label class="label">时间码</label>
+            <div class="input-row-inline">
+              <input id="screenshotTime" class="input" type="text" value="00:00:30" style="width:90px;flex:none" />
+              <span class="unit-label">格式 HH:MM:SS</span>
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="takeScreenshot()" style="margin-top:4px">截图</button>
+        </section>
+
+        <section class="card">
+          <div class="tool-section-title">视频元数据编辑</div>
+          <div class="field">
+            <div class="input-row">
+              <input id="metaFile" class="input" type="text" placeholder="选择视频文件" readonly />
+              <button class="btn btn-secondary" onclick="selectMetaFile()">选择文件</button>
+            </div>
+          </div>
+          <div class="meta-grid">
+            <label class="label">标题</label>
+            <input id="metaTitle" class="input" type="text" placeholder="视频标题" />
+            <label class="label">年份</label>
+            <input id="metaYear" class="input" type="text" />
+            <label class="label">注释</label>
+            <input id="metaComment" class="input" type="text" placeholder="可选注释" />
+          </div>
+          <button class="btn btn-primary" onclick="saveMeta()" style="margin-top:4px">写入元数据</button>
+        </section>
+
+        <section class="card">
+          <div class="tool-section-title">视频章节标记编辑</div>
+          <div class="field">
+            <div class="input-row">
+              <input id="chapterVideoFile" class="input" type="text" placeholder="选择视频文件" readonly />
+              <button class="btn btn-secondary" onclick="selectChapterVideo()">选择文件</button>
+              <button class="btn btn-ghost"     onclick="loadChapters()">读取章节</button>
+            </div>
+          </div>
+          <div class="chapter-table-header">
+            <span class="chapter-col-time">时间码</span>
+            <span class="chapter-col-title">章节名称</span>
+            <span class="chapter-col-del"></span>
+          </div>
+          <div id="chapterList" class="chapter-list">
+            <div class="chapter-empty">请先选择视频文件并点击"读取章节"，或直接添加新章节</div>
+          </div>
+          <div class="input-row" style="margin-top:6px;gap:6px;flex-wrap:wrap">
+            <button class="btn btn-ghost"      onclick="chapterAddRow()">＋ 添加章节</button>
+            <button class="btn btn-secondary"  onclick="chapterImportText()">从文本导入</button>
+          </div>
+          <button class="btn btn-primary" onclick="writeChapters()" style="margin-top:4px">写入章节</button>
+        </section>
+
+        <section class="card">
+          <div class="tool-section-title">多段视频合并</div>
+          <div class="concat-header" id="concatHeader" onclick="concatToggleList()">
+            <span class="concat-arrow" id="concatArrow">▸</span>
+            <span id="concatSummary">暂无文件</span>
+          </div>
+          <div id="concatList" class="concat-list collapsed">
+            <div class="concat-empty">暂无文件，点击"添加文件"或将视频文件拖入此处</div>
+          </div>
+          <div class="input-row" style="margin-top:6px;gap:6px;flex-wrap:wrap">
+            <button class="btn btn-secondary" onclick="concatAddFiles()">＋ 添加文件</button>
+            <button class="btn btn-secondary" onclick="concatAddDir()">添加目录</button>
+            <button class="btn btn-ghost"     onclick="concatClear()">清空列表</button>
+          </div>
+          <div class="field field-row" style="margin-top:8px">
+            <label class="label">合并模式</label>
+            <div class="radio-group">
+              <label class="radio-label"><input type="radio" name="concatMode" value="reencode" checked />转码合并（NVENC H.265 自适应）</label>
+              <label class="radio-label"><input type="radio" name="concatMode" value="copy" />无损合并</label>
+            </div>
+          </div>
+          <div class="field field-row">
+            <label class="label">片头片尾</label>
+            <div class="radio-group" style="flex-shrink:0">
+              <label class="radio-label"><input type="checkbox" id="concatHeadAd" checked />片头</label>
+              <label class="radio-label"><input type="checkbox" id="concatTailAd" checked />片尾</label>
+              <label class="radio-label" title="院线厂标做法：内置厂标成片作为独立片段接在合并结果之前/之后，自带音轨，完全不遮挡画面。不勾则改用画面顶部的文字标注。仅转码合并生效"><input type="checkbox" id="concatDynAd" onchange="onDynAdChange(this)" />厂标</label>
+            </div>
+            <input id="concatAdText" class="input" type="text" placeholder="文字标注内容" style="flex:1;min-width:140px;margin-left:12px" />
+          </div>
+          <div class="field field-row">
+            <label class="label">输出文件名</label>
+            <input id="concatOutName" class="input" type="text" placeholder="留空则用第一个文件名加品牌后缀" />
+          </div>
+          <button class="btn btn-primary" onclick="concatVideos()" style="margin-top:4px">开始合并</button>
+        </section>
+
+        <section class="card">
+          <div class="tool-section-title">双语字幕合并</div>
+          <div class="field">
+            <label class="label">字幕文件 1</label>
+            <div class="input-row">
+              <input id="mergeSub1" class="input" type="text" placeholder="选择第一个字幕文件（SRT / ASS）" readonly />
+              <button class="btn btn-secondary" onclick="selectMergeSub(1)">选择</button>
+            </div>
+          </div>
+          <div class="field">
+            <label class="label">字幕文件 2</label>
+            <div class="input-row">
+              <input id="mergeSub2" class="input" type="text" placeholder="选择第二个字幕文件（SRT / ASS）" readonly />
+              <button class="btn btn-secondary" onclick="selectMergeSub(2)">选择</button>
+            </div>
+          </div>
+          <div class="field field-row">
+            <label class="label">上方语言</label>
+            <div class="radio-group">
+              <label class="radio-label"><input type="radio" name="mergeTop" value="1" checked />字幕文件 1 在上</label>
+              <label class="radio-label"><input type="radio" name="mergeTop" value="2" />字幕文件 2 在上</label>
+            </div>
+          </div>
+          <div class="field field-row">
+            <label class="label">输出格式</label>
+            <div class="radio-group">
+              <label class="radio-label"><input type="radio" name="mergeFmt" value="srt" checked />SRT</label>
+              <label class="radio-label"><input type="radio" name="mergeFmt" value="ass" />ASS</label>
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="mergeSubtitles()" style="margin-top:4px">合并字幕</button>
+        </section>
+
+        <section class="card">
+          <div class="tool-section-title">VMAF / 视频质量评分</div>
+          <div class="field">
+            <label class="label">参考视频（原始）</label>
+            <div class="input-row">
+              <input id="vmafRefFile" class="input" type="text" placeholder="选择原始视频文件" readonly />
+              <button class="btn btn-secondary" onclick="selectVmafRef()">选择</button>
+            </div>
+          </div>
+          <div class="field">
+            <label class="label">压缩视频（待评）</label>
+            <div class="input-row">
+              <input id="vmafDistFile" class="input" type="text" placeholder="选择压缩后的视频文件" readonly />
+              <button class="btn btn-secondary" onclick="selectVmafDist()">选择</button>
+            </div>
+          </div>
+          <div class="input-row" style="margin-top:6px;gap:8px">
+            <button class="btn btn-secondary" onclick="checkVmafSupport()">检测 libvmaf</button>
+            <button class="btn btn-primary"   onclick="scoreVmaf()">开始评分</button>
+          </div>
+          <div id="vmafResult" class="vmaf-result hidden"></div>
+        </section>
+
+        <section class="card">
+          <div class="tool-section-title">FFmpeg 环境检测</div>
+          <button class="btn btn-secondary" style="width:fit-content" onclick="checkFFmpegEnv()">检测</button>
+          <div id="ffmpegInfoPanel" class="hidden">
+            <div id="ffmpegVersion" class="field-hint" style="margin-bottom:6px"></div>
+            <div id="gpuInfo" class="field-hint" style="margin-bottom:6px"></div>
+            <div id="encoderList" class="encoder-list"></div>
+            <div id="capabilityList" style="margin-top:10px"></div>
+          </div>
+        </section>
+
+      </div>
+    </div>
+
+    <div id="tab-subtitle" class="tab-content">
+      <div class="sub-editor-bar">
+        <input id="subEditFile" class="input" type="text" placeholder="选择 SRT / ASS 字幕文件" readonly style="flex:1" />
+        <button class="btn btn-secondary" onclick="selectSubEditFile()">选择文件</button>
+        <button id="assStyleBtn" class="btn btn-secondary hidden" onclick="toggleAssStylePanel()" title="编辑 ASS 字幕样式">样式编辑</button>
+        <button id="subSaveBtn" class="btn btn-primary" onclick="saveSubtitle()" disabled>保存</button>
+        <button id="subSaveAsBtn" class="btn btn-secondary" onclick="saveSubtitleAs()" disabled>另存为</button>
+      </div>
+      <div id="subFindBar" class="sub-find-bar hidden">
+        <input id="subFindInput"   class="input input-sm" type="text" placeholder="搜索文本…" style="flex:1;min-width:80px" />
+        <input id="subReplaceInput" class="input input-sm" type="text" placeholder="替换为…" style="flex:1;min-width:80px" />
+        <label class="checkbox-label" style="white-space:nowrap"><input type="checkbox" id="subFindCase" />区分大小写</label>
+        <button class="btn btn-ghost btn-sm" onclick="findNextSub()">下一个</button>
+        <button class="btn btn-secondary btn-sm" onclick="replaceAllSub()">全部替换</button>
+        <button class="btn btn-ghost btn-sm" onclick="closeFindBar()">✕</button>
+      </div>
+      <div id="subStats" class="sub-stats hidden"></div>
+      <div class="sub-table-header sub-table-wrap" style="flex:none">
+        <span class="sub-col-idx">#</span>
+        <span>开始时间</span>
+        <span>结束时间</span>
+        <span>文本</span>
+        <span></span>
+      </div>
+      <div class="sub-table-wrap">
+        <div id="subTableBody" class="sub-table-body">
+          <div class="sub-empty">请选择字幕文件</div>
+        </div>
+      </div>
+      <div id="subFooterBar" class="sub-footer-bar hidden">
+        <button class="btn btn-ghost btn-sm" onclick="addSubtitleRow()">＋ 添加行</button>
+        <button class="btn btn-ghost btn-sm" onclick="openFindBar()">搜索替换</button>
+      </div>
+
+      <div id="assStylePanel" class="ass-panel hidden">
+        <div class="ass-panel-header">
+          <span class="ass-panel-title">ASS 样式编辑</span>
+          <div class="ass-panel-actions">
+            <button class="btn btn-secondary btn-sm" onclick="assAddStyle()">＋ 新建样式</button>
+            <button class="btn btn-primary btn-sm" onclick="assStyleSave()">保存样式</button>
+            <button class="btn btn-ghost btn-sm" onclick="toggleAssStylePanel()">关闭</button>
+          </div>
+        </div>
+        <div class="ass-panel-body">
+          <div class="ass-panel-col ass-style-list-wrap">
+            <div class="ass-panel-subtitle">样式列表</div>
+            <div id="assStyleList" class="ass-style-list"></div>
+          </div>
+          <div class="ass-panel-col ass-style-form-wrap">
+            <div class="ass-panel-subtitle">当前样式 <span id="assEditingName" class="ass-editing-name">—</span></div>
+            <div id="assStyleForm" class="ass-style-form">
+              <div class="ass-form-empty">在左侧选择一个样式以编辑其参数</div>
+            </div>
+          </div>
+          <div class="ass-panel-col ass-preview-wrap">
+            <div class="ass-panel-subtitle">画面预览</div>
+            <div class="ass-preview-inner">
+              <div id="assPreviewBox" class="ass-preview-box">
+                <span id="assPreviewText">字幕预览 Subtitle Preview</span>
+              </div>
+              <div class="ass-preview-field">
+                <label class="label" for="assPreviewInput">预览文案</label>
+                <input id="assPreviewInput" class="input input-sm" type="text" value="字幕预览 Subtitle Preview"
+                       oninput="document.getElementById('assPreviewText').textContent=this.value" />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="tab-watermark" class="tab-content">
+      <div class="tab-scroll">
+
+        <section class="card">
+          <div class="tool-section-title">视频水印</div>
+
+          <div class="field">
+            <label class="label">输入目录</label>
+            <div class="input-row">
+              <input id="wmInputDir" class="input" type="text" placeholder="选择包含视频的目录" readonly />
+              <button class="btn btn-secondary" onclick="wmSelectInput()">浏览</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="label">输出目录</label>
+            <div class="input-row">
+              <input id="wmOutputDir" class="input" type="text" placeholder="选择输出目录" readonly />
+              <button class="btn btn-secondary" onclick="wmSelectOutput()">浏览</button>
+            </div>
+          </div>
+
+          <div class="input-row" style="margin-top:14px;gap:8px">
+            <label class="radio-label" title="同一条 FFmpeg 命令里再出一路小体积版本，共用同一次解码和同一次水印渲染，比整片压两遍快得多">
+              <input type="checkbox" id="wmWebVersion" onchange="onWmWebVersionChange()" /> 在线版
+            </label>
+          </div>
+
+          <div id="wmWebOptions" style="display:none">
+            <div class="options-grid" style="padding:6px 0 0">
+              <div class="field field-row">
+                <label class="label">在线版码率</label>
+                <div class="input-row-inline">
+                  <input id="wmWebBitrate" class="input input-sm" type="number" value="" step="500" min="0" max="30000" placeholder="自动" onchange="saveWmSettings()" />
+                  <span class="unit-label">kbps</span>
+                </div>
+              </div>
+              <div class="field field-row">
+                <label class="label">在线版编码</label>
+                <select id="wmWebCodec" class="select" onchange="saveWmSettings()">
+                  <option value="h265">H.265（同码率画质更好，体积更小）</option>
+                  <option value="h264">H.264（浏览器直接播放兼容性最好）</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="input-row" style="margin-top:14px;gap:8px">
+            <label class="radio-label"><input type="checkbox" id="wmNotify" /> 完成后系统通知</label>
+            <label class="radio-label"><input type="checkbox" id="wmAutoOpen" checked /> 完成后打开输出目录</label>
+          </div>
+
+          <div class="input-row" style="margin-top:14px;gap:8px">
+            <button class="btn btn-primary" id="wmStartBtn" onclick="startWatermark()">开始处理</button>
+            <button class="btn btn-secondary" id="wmPackBtn" onclick="packWatermarkOutput()" title="清理成品目录名/文件名中的特殊符号与乱码字母，清掉日志与空目录，按主播归类分成最多 10 个包，最后整体放进「月日+数量」的日期目录（如 0921194）里，可直接上传网盘；已有的日期目录原样保留">汇总</button>
+            <button class="btn btn-secondary" id="wmStopBtn" onclick="stopWatermark()" disabled>停止</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="progress" style="margin-bottom:8px">
+            <div class="progress-bar" id="wmProgressBar"><div class="progress-fill" id="wmProgressFill"></div></div>
+          </div>
+          <div class="log-panel">
+            <div class="log-header"><span>日志</span></div>
+            <div id="wmLogArea" class="log-area"></div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <div id="tab-dedup" class="tab-content">
+      <div class="tab-scroll">
+
+        <section class="card">
+          <div class="tool-section-title">视频去重原创化</div>
+
+          <div class="field">
+            <label class="label">输入目录</label>
+            <div class="input-row">
+              <input id="dedupInputDir" class="input" type="text" placeholder="选择目录" readonly />
+              <button class="btn btn-secondary" onclick="dedupSelectInput()">浏览</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <label class="label">输出目录</label>
+            <div class="input-row">
+              <input id="dedupOutputDir" class="input" type="text" placeholder="选择输出目录" readonly />
+              <button class="btn btn-secondary" onclick="dedupSelectOutput()">浏览</button>
+            </div>
+          </div>
+
+          <div class="input-row" style="margin-top:14px;gap:8px">
+            <label class="radio-label"><input type="checkbox" id="dedupNotify" /> 完成后系统通知</label>
+            <label class="radio-label"><input type="checkbox" id="dedupAutoOpen" checked /> 完成后打开输出目录</label>
+          </div>
+
+          <div class="input-row" style="margin-top:14px;gap:8px">
+            <button class="btn btn-primary" id="dedupStartBtn" onclick="startDedup()">开始处理</button>
+            <button class="btn btn-secondary" id="dedupStopBtn" onclick="stopDedup()" disabled>停止</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="progress" style="margin-bottom:8px">
+            <div class="progress-bar" id="dedupProgressBar"><div class="progress-fill" id="dedupProgressFill"></div></div>
+          </div>
+          <div class="log-panel">
+            <div class="log-header"><span>日志</span></div>
+            <div id="dedupLogArea" class="log-area"></div>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <div id="tab-settings" class="tab-content">
+      <div class="tab-scroll">
+
+        <section class="card">
+          <div class="tool-section-title">AI 提供商</div>
+          <div class="field field-row">
+            <label class="label">模型</label>
+            <div class="radio-group">
+              <label class="radio-label"><input type="radio" name="aiProvider" value="deepseek" checked onchange="onAIProviderChange()" />DeepSeek</label>
+              <label class="radio-label"><input type="radio" name="aiProvider" value="zhipu" onchange="onAIProviderChange()" />GLM</label>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="saveAIConfig()" style="margin-left:auto">保存</button>
+          </div>
+          <div id="aiKeyDeepSeek" class="field field-row">
+            <label class="label">DeepSeek Key</label>
+            <input id="aiDeepSeekKey" class="input" type="password" placeholder="填写后保存到 keys.json；已配置则不再显示" />
+          </div>
+          <div id="aiKeyZhipu" class="field field-row hidden">
+            <label class="label">GLM Key</label>
+            <input id="aiZhipuKey" class="input" type="password" placeholder="填写后保存到 keys.json；已配置则不再显示" />
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="tool-section-title">翻译 API 配置</div>
+          <div class="field field-row">
+            <label class="label">翻译服务</label>
+            <div class="radio-group">
+              <label class="radio-label"><input type="radio" name="transProvider" value="deepseek" checked onchange="onTransProviderChange()" />内置 AI</label>
+              <label class="radio-label"><input type="radio" name="transProvider" value="deepl"   onchange="onTransProviderChange()" />DeepL</label>
+              <label class="radio-label"><input type="radio" name="transProvider" value="baidu"         onchange="onTransProviderChange()" />百度翻译</label>
+              <label class="radio-label"><input type="radio" name="transProvider" value="tencent"       onchange="onTransProviderChange()" />腾讯翻译君</label>
+            </div>
+          </div>
+          <div id="transKeyDeepSeek" class="field field-row">
+            <label class="label">API Key</label>
+            <input id="transDeepSeekKey" class="input" type="password" placeholder="留空则使用内置 Key（如已配置 keys.json）" />
+          </div>
+          <div id="transKeyDeepL" class="field field-row hidden">
+            <label class="label">Auth Key</label>
+            <input id="transDeepLKey" class="input" type="password" placeholder="DeepL Auth Key" />
+            <a class="field-hint" style="white-space:nowrap;margin-left:6px" href="#" onclick="openDeepLLink()">申请 Key ↗</a>
+          </div>
+          <div id="transKeyBaidu" class="field hidden" style="gap:6px;display:flex;flex-direction:column">
+            <div class="field field-row">
+              <label class="label">App ID</label>
+              <input id="transBaiduAppID" class="input" type="text" placeholder="百度翻译 AppID" />
+            </div>
+            <div class="field field-row">
+              <label class="label">密钥</label>
+              <input id="transBaiduKey" class="input" type="password" placeholder="百度翻译 SecretKey" />
+            </div>
+          </div>
+          <div id="transKeyTencent" class="field hidden" style="gap:6px;display:flex;flex-direction:column">
+            <div class="field field-row">
+              <label class="label">SecretId</label>
+              <input id="transTencentID" class="input" type="text" placeholder="腾讯云 SecretId" />
+            </div>
+            <div class="field field-row">
+              <label class="label">SecretKey</label>
+              <input id="transTencentKey" class="input" type="password" placeholder="腾讯云 SecretKey" />
+            </div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="tool-section-title">字幕自动同步 — ffsubsync</div>
+          <div class="settings-install-steps">
+            <div class="settings-step">
+              <span class="settings-step-num">1</span>
+              <span>确保已安装 <a href="#" onclick="openLink('https://www.python.org/downloads/');return false">Python 3.8+</a></span>
+            </div>
+            <div class="settings-step">
+              <span class="settings-step-num">2</span>
+              <span>在命令行运行安装命令</span>
+              <div class="settings-cmd-row">
+                <code class="settings-cmd">pip install ffsubsync</code>
+                <button class="btn btn-ghost btn-sm" onclick="copyCmd('pip install ffsubsync')" title="复制到剪贴板">复制</button>
+              </div>
+            </div>
+            <div class="settings-step">
+              <span class="settings-step-num">3</span>
+              <span>点击下方按钮检测是否安装成功</span>
+            </div>
+          </div>
+          <button class="btn btn-secondary" onclick="checkSyncTool()" style="margin-top:8px">检测安装</button>
+        </section>
+
+        <section class="card">
+          <div class="tool-section-title">语音转字幕 — WhisperX（本地）</div>
+          <div class="field field-row">
+            <label class="label">Python 路径</label>
+            <input id="whisperxPython" class="input" type="text" placeholder="%USERPROFILE%\miniconda3\envs\whisperx\python.exe" onchange="saveWhisperXSettings()" />
+          </div>
+          <div class="field field-row">
+            <label class="label">HTTP 代理</label>
+            <input id="whisperxProxy" class="input" type="text" placeholder="http://127.0.0.1:7890（下载 HF 模型用，留空则不设）" onchange="saveWhisperXSettings()" />
+          </div>
+          <div class="field field-row">
+            <label class="label">模型目录</label>
+            <input id="whisperxModelDir" class="input" type="text" placeholder="留空自动用 E:\MuxerModels；可挂载网盘下载的模型目录" onchange="saveWhisperXSettings()" />
+            <button class="btn btn-secondary" onclick="selectWhisperxModelDir()" style="margin-left:6px;white-space:nowrap">浏览</button>
+          </div>
+          <button class="btn btn-secondary" onclick="checkWhisperXTool()" style="margin-top:8px">检测 WhisperX</button>
+        </section>
+
+        <section class="card">
+          <div class="tool-section-title">品牌配置中心</div>
+          <div class="label" style="margin:2px 0 4px">封装 / 合并</div>
+          <div class="field field-row">
+            <label class="label">站点名</label>
+            <input id="cfgBrandName" class="input" type="text" placeholder="低端影视" />
+          </div>
+          <div class="field field-row">
+            <label class="label">站点域名</label>
+            <input id="cfgBrandUrl" class="input" type="text" placeholder="ddys.io" />
+          </div>
+          <div class="field field-row">
+            <label class="label">文件名标签</label>
+            <input id="cfgBrandTag" class="input" type="text" placeholder="DDYS" />
+          </div>
+          <div class="label" style="margin:8px 0 4px">水印 / 去重</div>
+          <div class="field field-row">
+            <label class="label">水印网址</label>
+            <input id="cfgWmUrl" class="input" type="text" placeholder="xunfang.io" />
+          </div>
+          <div class="field field-row">
+            <label class="label">水印品牌</label>
+            <input id="cfgWmBrand" class="input" type="text" placeholder="寻芳" />
+          </div>
+          <div class="field field-row">
+            <label class="label">营销语</label>
+            <input id="cfgWmTagline" class="input" type="text" placeholder="写入图片/视频元数据" />
+          </div>
+          <button class="btn btn-primary" onclick="saveBrandConfig()" style="margin-top:6px">保存品牌配置</button>
+        </section>
+
+        <section class="card">
+          <div class="tool-section-title">关于</div>
+          <div id="aboutInfo" class="info-grid"></div>
+          <button class="btn btn-secondary" onclick="loadAppInfo()" style="margin-top:8px">刷新</button>
+        </section>
+
+      </div>
+    </div>
+
+    <div id="tab-history" class="tab-content">
+      <div class="history-toolbar">
+        <span class="history-count" id="historyCount">共 0 条记录</span>
+        <div class="radio-group" style="gap:12px;margin-left:20px">
+          <label class="radio-label"><input type="radio" name="historyFilter" value="all" checked onchange="renderHistory()" />全部</label>
+          <label class="radio-label"><input type="radio" name="historyFilter" value="ok" onchange="renderHistory()" />成功</label>
+          <label class="radio-label"><input type="radio" name="historyFilter" value="fail" onchange="renderHistory()" />失败</label>
+        </div>
+        <div style="margin-left:auto;display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm" onclick="exportHistoryCSV()">导出</button>
+          <button class="btn btn-ghost btn-sm" onclick="clearHistory()">清空</button>
+        </div>
+      </div>
+      <div id="historyList" class="history-list"></div>
+    </div>
+
+    <div id="tab-queue" class="tab-content">
+      <div class="tab-scroll">
+
+        <section class="card">
+          <div class="tool-section-title">队列控制</div>
+          <div class="queue-controls">
+            <div class="field field-row" style="flex:1;min-width:160px">
+              <label class="label">定时开始</label>
+              <input id="queueSchedule" class="input" type="time" style="width:110px" title="留空则立即开始" />
+            </div>
+            <div class="field field-row" style="flex:1;min-width:200px">
+              <label class="label">完成后操作</label>
+              <select id="queuePostAction" class="select" style="width:auto">
+                <option value="none">无操作</option>
+                <option value="sleep">进入休眠</option>
+                <option value="shutdown">关机</option>
+              </select>
+            </div>
+          </div>
+          <div class="input-row" style="gap:8px;margin-top:8px;flex-wrap:wrap">
+            <button id="queueStartBtn" class="btn btn-primary"   onclick="startQueue()">▶ 开始队列</button>
+            <button id="queueStopBtn"  class="btn btn-secondary hidden" onclick="stopQueue()" title="温和停止：取消所有待执行任务，正在压制的当前任务继续完成">■ 完成当前后停止</button>
+            <button id="queueStopAllBtn" class="btn btn-danger hidden" onclick="stopQueueAll()" title="立即停止：中断正在压制的任务并取消全部待执行任务">⛔ 停止全部</button>
+            <button class="btn btn-secondary" onclick="resetCancelledTasks()" title="将取消/失败的任务重置为等待中">重置失败</button>
+            <button class="btn btn-ghost"     onclick="clearQueue()" title="清除所有非运行中任务">清空队列</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <div id="queueEmpty" class="queue-empty">队列为空，在「封装」标签页设好参数后点击「加入队列」</div>
+          <div id="queueList" class="queue-list hidden"></div>
+        </section>
+
+      </div>
+    </div>
+
+    <div id="toast"></div>
+  </div>
+
+  <script src="./src/main.js" type="module"></script>
+</body>
+</html>

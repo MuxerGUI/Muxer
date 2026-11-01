@@ -1,0 +1,17 @@
+{
+  "aiProvider": "deepseek",
+  "deepseekKey": "",
+  "zhipuKey": "",
+  "dashscopeKey": "",
+  "ossAccessKeyID": "",
+  "ossAccessKeySecret": "",
+  "ossBucket": "",
+  "ossEndpoint": "",
+  "modelDir": "",
+  "brandName": "",
+  "brandUrl": "",
+  "brandTag": "",
+  "watermarkUrl": "",
+  "watermarkBrand": "",
+  "watermarkTagline": ""
+}
