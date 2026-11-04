@@ -32,6 +32,7 @@ import {
   GetConfigStatus,
   GetAIConfig, SaveAIConfig,
   GetAppInfo, GetBrandConfig, SaveBrandConfig, GetDiskUsage,
+  CheckUpdate,
 } from '../wailsjs/go/main/App.js'
 import { EventsOn, BrowserOpenURL } from '../wailsjs/runtime/runtime.js'
 
@@ -1716,6 +1717,43 @@ window.loadAppInfo = async function () {
   box.innerHTML = rows.map(([k, v]) =>
     `<span class="info-key">${escapeHtml(k)}</span><span class="info-val">${escapeHtml(v)}</span>`
   ).join('')
+}
+
+window.checkUpdate = async function () {
+  const btn = document.getElementById('updateCheckBtn')
+  const status = document.getElementById('updateStatus')
+  if (!btn || btn.disabled) return
+  btn.disabled = true
+  if (status) status.textContent = '检测中...'
+  let info
+  try {
+    info = await CheckUpdate(true)
+  } catch (e) {
+    if (status) status.textContent = '检测失败: ' + e
+    btn.disabled = false
+    return
+  }
+  btn.disabled = false
+  if (!status) return
+
+  let text
+  if (info.error) {
+    text = info.error
+  } else if (info.hasUpdate) {
+    text = `发现新版本 ${info.latest}${info.publishedAt ? ' · ' + info.publishedAt : ''}`
+  } else {
+    status.textContent = `已是最新 ${info.current}`
+    return
+  }
+
+  const link = document.createElement('a')
+  link.href = '#'
+  link.textContent = '打开下载页'
+  link.onclick = (e) => {
+    e.preventDefault()
+    window.openLink(info.url || '')
+  }
+  status.replaceChildren(document.createTextNode(text + ' · '), link)
 }
 
 async function loadBrandConfig() {

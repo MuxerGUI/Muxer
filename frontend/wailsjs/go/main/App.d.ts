@@ -20,6 +20,8 @@ export function CheckFFmpeg():Promise<boolean>;
 
 export function CheckSubtitleQuality(arg1:string,arg2:string):Promise<boolean>;
 
+export function CheckUpdate(arg1:boolean):Promise<main.UpdateInfo>;
+
 export function CheckVMAF():Promise<boolean>;
 
 export function CheckWhisperX(arg1:string,arg2:string,arg3:string):Promise<boolean>;

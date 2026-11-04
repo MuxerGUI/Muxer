@@ -146,6 +146,7 @@
 - WhisperX 的 `python.exe` 路径、HTTP 代理、**模型目录**（浏览挂载）与一键检测
 - ffsubsync 安装引导与一键检测
 - 安装命令一键复制
+- 「关于」页手动检测更新：只在点击时访问 GitHub Releases，不随启动联网
 
 ### 历史
 

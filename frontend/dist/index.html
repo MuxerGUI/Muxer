@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Muxer</title>
   
-  <script defer src="./assets/index.747efa26.js"></script>
+  <script defer src="./assets/index.77108113.js"></script>
 </head>
 <body>
   <div id="app">
@@ -1156,7 +1156,11 @@
         <section class="card">
           <div class="tool-section-title">关于</div>
           <div id="aboutInfo" class="info-grid"></div>
-          <button class="btn btn-secondary" onclick="loadAppInfo()" style="margin-top:8px">刷新</button>
+          <div class="input-row" style="margin-top:8px;gap:8px;align-items:center;flex-wrap:wrap">
+            <button class="btn btn-secondary" onclick="loadAppInfo()">刷新</button>
+            <button id="updateCheckBtn" class="btn btn-secondary" onclick="checkUpdate()">检测更新</button>
+            <span id="updateStatus" class="field-hint"></span>
+          </div>
         </section>
 
       </div>

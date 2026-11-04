@@ -26,6 +26,7 @@ type appKeys struct {
 	WatermarkURL       string `json:"watermarkUrl"`
 	WatermarkBrand     string `json:"watermarkBrand"`
 	WatermarkTagline   string `json:"watermarkTagline"`
+	UpdateRepo         string `json:"updateRepo"`
 }
 
 var (
@@ -235,6 +236,7 @@ func keysRawFromStruct() map[string]interface{} {
 		"watermarkUrl":       k.WatermarkURL,
 		"watermarkBrand":     k.WatermarkBrand,
 		"watermarkTagline":   k.WatermarkTagline,
+		"updateRepo":         k.UpdateRepo,
 	}
 }
 

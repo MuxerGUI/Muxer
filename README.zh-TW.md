@@ -146,6 +146,7 @@
 - WhisperX 的 `python.exe` 路徑、HTTP 代理、**模型目錄**（瀏覽掛載）與一鍵檢測
 - ffsubsync 安裝引導與一鍵檢測
 - 安裝指令一鍵複製
+- 「關於」頁手動檢測更新：只在點擊時連線 GitHub Releases，不隨啟動連網
 
 ### 歷史紀錄
 
@@ -230,26 +231,13 @@
 go install github.com/wailsapp/wails/v2/cmd/wails@latest
 ```
 
-安裝後確認 `%USERPROFILE%\go\bin` 已加入系統 PATH。中國大陸網路可先設代理再安裝：
+安裝後確認 `%USERPROFILE%\go\bin` 已加入系統 PATH。若網路無法連上 GitHub，安裝指令可先設代理：
 
 ```powershell
 $env:HTTP_PROXY="http://127.0.0.1:7890"; $env:HTTPS_PROXY=$env:HTTP_PROXY; go install github.com/wailsapp/wails/v2/cmd/wails@latest
 ```
 
-連接埠取決於代理軟體，把 `7890` 換成實際監聽的連接埠即可：
-
-| 代理軟體 | 預設連接埠 |
-|------|------|
-| Clash / Clash for Windows / Mihomo | `7890` |
-| Clash Verge Rev | `7897` |
-| v2rayN | HTTP `10809`（SOCKS `10808`） |
-| sing-box / Hiddify | `2080` |
-| Netch | `2801` |
-| Shadowsocks-windows | SOCKS `1080` |
-
-連接埠在軟體主畫面或設定裡看得到；系統代理開啟時也可以直接讀出來：`(Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings').ProxyServer`。少見的自訂連接埠同樣用這個方式查。
-
-Go 只認 `HTTP_PROXY` / `HTTPS_PROXY` 環境變數（以及 `NO_PROXY`），Windows 的系統代理設定對它無效，所以必須明確設定一次；這個變數只在目前的 PowerShell 工作階段有效。
+`7890` 換成代理軟體實際監聽的連接埠。Go 只認 `HTTP_PROXY` / `HTTPS_PROXY` 環境變數（以及 `NO_PROXY`），Windows 系統代理設定對它無效，且變數只在目前 PowerShell 工作階段有效。
 
 ### 建置指令
 

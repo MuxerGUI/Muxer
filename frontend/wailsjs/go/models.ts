@@ -644,6 +644,34 @@ export namespace main {
 	        this.forceSRT = source["forceSRT"];
 	    }
 	}
+	export class UpdateInfo {
+	    current: string;
+	    latest: string;
+	    hasUpdate: boolean;
+	    publishedAt: string;
+	    url: string;
+	    repo: string;
+	    error: string;
+	    checkedAt: string;
+	    cached: boolean;
+	
+	    static createFrom(source: any = {}) {
+	        return new UpdateInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.current = source["current"];
+	        this.latest = source["latest"];
+	        this.hasUpdate = source["hasUpdate"];
+	        this.publishedAt = source["publishedAt"];
+	        this.url = source["url"];
+	        this.repo = source["repo"];
+	        this.error = source["error"];
+	        this.checkedAt = source["checkedAt"];
+	        this.cached = source["cached"];
+	    }
+	}
 	export class VMAFResult {
 	    vmaf: number;
 	    psnr: number;

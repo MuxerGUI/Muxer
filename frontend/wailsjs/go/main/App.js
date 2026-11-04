@@ -38,6 +38,10 @@ export function CheckSubtitleQuality(arg1, arg2) {
   return window['go']['main']['App']['CheckSubtitleQuality'](arg1, arg2);
 }
 
+export function CheckUpdate(arg1) {
+  return window['go']['main']['App']['CheckUpdate'](arg1);
+}
+
 export function CheckVMAF() {
   return window['go']['main']['App']['CheckVMAF']();
 }

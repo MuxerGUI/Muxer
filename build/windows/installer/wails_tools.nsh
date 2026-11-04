@@ -14,7 +14,7 @@
     !define INFO_PRODUCTNAME "Muxer"
 !endif
 !ifndef INFO_PRODUCTVERSION
-    !define INFO_PRODUCTVERSION "1.6.61"
+    !define INFO_PRODUCTVERSION "1.6.63"
 !endif
 !ifndef INFO_COPYRIGHT
     !define INFO_COPYRIGHT "Copyright © 2026 ddys"
