@@ -2569,6 +2569,59 @@ func firstTextSubTrack(tracks []subTrack) *subTrack {
 	return nil
 }
 
+func entriesAreBilingual(entries []SubtitleEntry) bool {
+	bi, total := 0, 0
+	for _, e := range entries {
+		zh, en := false, false
+		for _, line := range splitRawSubtitleLines(e.Text) {
+			t := strings.TrimSpace(line)
+			if t == "" {
+				continue
+			}
+			if looksForeignSubtitle(t) {
+				en = true
+			} else {
+				zh = true
+			}
+		}
+		if !zh && !en {
+			continue
+		}
+		total++
+		if zh && en {
+			bi++
+		}
+	}
+	return total > 0 && bi*100/total >= 25
+}
+
+func probeTrackBilingual(videoFile string, streamIndex int) bool {
+	cmd := exec.Command("ffmpeg", "-v", "quiet", "-i", videoFile,
+		"-map", fmt.Sprintf("0:%d", streamIndex), "-c:s", "srt", "-f", "srt", "-t", "300", "pipe:1")
+	hideWindow(cmd)
+	out, err := cmd.Output()
+	if err != nil || len(out) == 0 {
+		return false
+	}
+	entries := parseSRTEntries(decodeTextFile(out))
+	if len(entries) > 120 {
+		entries = entries[:120]
+	}
+	return entriesAreBilingual(entries)
+}
+
+func firstBilingualTrack(videoFile string, tracks []subTrack) *subTrack {
+	for i := range tracks {
+		if !isTextSubCodec(tracks[i].codec) {
+			continue
+		}
+		if probeTrackBilingual(videoFile, tracks[i].streamIndex) {
+			return &tracks[i]
+		}
+	}
+	return nil
+}
+
 func (a *App) extractOneSubtitle(videoFile, saveDir string) bool {
 	cmd := exec.Command("ffprobe", "-v", "quiet", "-print_format", "json", "-show_streams", videoFile)
 	hideWindow(cmd)
@@ -2626,12 +2679,19 @@ func (a *App) extractOneSubtitle(videoFile, saveDir string) bool {
 		return false
 	}
 
-	zhTrack := firstTextSubTrack(simpTracks)
+	simplified := firstTextSubTrack(simpTracks)
+	traditional := firstTextSubTrack(tradTracks)
+	zhTrack := simplified
 	if zhTrack == nil {
-		zhTrack = firstTextSubTrack(tradTracks)
+		zhTrack = traditional
 	}
 	enTrack := firstTextSubTrack(engTracks)
-	if zhTrack != nil && enTrack != nil {
+
+	bilingualTrack := firstBilingualTrack(videoFile, simpTracks)
+	if bilingualTrack == nil && simplified == nil {
+		bilingualTrack = firstBilingualTrack(videoFile, tradTracks)
+	}
+	if bilingualTrack == nil && zhTrack != nil && enTrack != nil {
 		if a.extractBilingualMerged(videoFile, saveDir, *zhTrack, *enTrack) {
 			return true
 		}
@@ -2640,19 +2700,23 @@ func (a *App) extractOneSubtitle(videoFile, saveDir string) bool {
 
 	var target *subTrack
 	var pickReason string
-	if t := firstTextSubTrack(simpTracks); t != nil {
-		target = t
+	switch {
+	case bilingualTrack != nil:
+		target = bilingualTrack
+		pickReason = "中英双语"
+	case simplified != nil:
+		target = simplified
 		pickReason = "简体"
-	} else if t := firstTextSubTrack(tradTracks); t != nil {
-		target = t
+	case traditional != nil:
+		target = traditional
 		pickReason = "繁体"
-	} else if t := firstTextSubTrack(engTracks); t != nil {
-		target = t
+	case enTrack != nil:
+		target = enTrack
 		pickReason = "英文"
-	} else if t := firstTextSubTrack(allTracks); t != nil {
-		target = t
+	case firstTextSubTrack(allTracks) != nil:
+		target = firstTextSubTrack(allTracks)
 		pickReason = "首条文本"
-	} else {
+	default:
 		target = &allTracks[0]
 		pickReason = "首条图形"
 	}
@@ -2791,8 +2855,27 @@ func mergeBilingualSRT(zhEntries, enEntries []SubtitleEntry) string {
 		if ze < zs {
 			zs, ze = ze, zs
 		}
-		var enParts []string
-		seen := map[string]bool{}
+		var zhParts, enParts []string
+		seen := make(map[string]bool, len(ens)+2)
+		addEN := func(t string) {
+			key := lineKey(t)
+			if key == "" || seen[key] {
+				return
+			}
+			seen[key] = true
+			enParts = append(enParts, t)
+		}
+		for _, ln := range splitRawSubtitleLines(zhText) {
+			t := strings.TrimSpace(ln)
+			if t == "" {
+				continue
+			}
+			if looksForeignSubtitle(t) {
+				addEN(t)
+				continue
+			}
+			zhParts = append(zhParts, t)
+		}
 		for _, en := range ens {
 			ov := math.Min(ze, en.end) - math.Max(zs, en.start)
 			if ov <= 0 {
@@ -2802,14 +2885,10 @@ func mergeBilingualSRT(zhEntries, enEntries []SubtitleEntry) string {
 			if dur > 0 && ov < 0.5*dur {
 				continue
 			}
-			if seen[en.text] {
-				continue
-			}
-			seen[en.text] = true
-			enParts = append(enParts, en.text)
+			addEN(en.text)
 		}
 		idx++
-		sb.WriteString(formatSRTEntry(idx, zs, ze, joinBilingual(zhText, strings.Join(enParts, " "))))
+		sb.WriteString(formatSRTEntry(idx, zs, ze, joinBilingual(strings.Join(zhParts, "\n"), strings.Join(enParts, " "))))
 	}
 	return strings.TrimLeft(sb.String(), "\n")
 }
@@ -2927,9 +3006,10 @@ func (a *App) cleanExtractedSubtitle(filePath string) {
 	}
 
 	for i := range entries {
-		cleaned := asrCleanSubtitleText(entries[i].Text)
+		cleaned := dedupeEntryLines(entries[i].Text)
 		if cleaned != entries[i].Text {
 			entries[i].Text = cleaned
+			stats.linesDeduped++
 		}
 	}
 
@@ -3062,7 +3142,7 @@ func (a *App) cleanExtractedSubtitle(filePath string) {
 
 	totalFixed := stats.tagsStripped + stats.hiRemoved + stats.adsRemoved +
 		stats.emptyRemoved + stats.negDurFixed + stats.exactDupes +
-		stats.nearDupes + stats.overlapsFixed + stats.shortRemoved
+		stats.nearDupes + stats.overlapsFixed + stats.shortRemoved + stats.linesDeduped
 
 	if totalFixed == 0 {
 		return
@@ -3096,6 +3176,9 @@ func (a *App) cleanExtractedSubtitle(filePath string) {
 	if stats.negDurFixed > 0 {
 		parts = append(parts, fmt.Sprintf("修负时长%d条", stats.negDurFixed))
 	}
+	if stats.linesDeduped > 0 {
+		parts = append(parts, fmt.Sprintf("条目内去重%d行", stats.linesDeduped))
+	}
 
 	a.log("info", fmt.Sprintf("字幕清理 %d→%d · %s",
 		origCount, len(entries), strings.Join(parts, "、")))
@@ -3111,6 +3194,7 @@ type cleanStats struct {
 	nearDupes     int
 	overlapsFixed int
 	shortRemoved  int
+	linesDeduped  int
 }
 
 func normalizeText(s string) string {
@@ -7387,6 +7471,7 @@ func (a *App) buildCleanSRT(inputFile string) (string, int, bool) {
 		text = stripSubtitleAdText(text)
 		text = asrCleanSubtitleText(text)
 		text = mergeShortLines(text)
+		text = dedupeEntryLines(text)
 		cleanTexts[i] = text
 		if text != "" && isSuspiciousSubtitleAd(text) {
 			suspicious = append(suspicious, i)

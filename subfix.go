@@ -421,7 +421,7 @@ func subtitleJoiner(format string) string {
 func planSubtitleFix(entries []SubtitleEntry) []subtitleFixUnit {
 	units := make([]subtitleFixUnit, len(entries))
 	for i, e := range entries {
-		frags := parseStyledFrags(e.Text)
+		frags := dedupeFragLines(parseStyledFrags(e.Text))
 		units[i] = subtitleFixUnit{
 			index:    i,
 			kind:     classifyFrags(frags),
@@ -661,6 +661,73 @@ func subtitleFixEquivalent(orig, fixed string) bool {
 	return a == subtitleCoreText(fixed)
 }
 
+func lineKey(s string) string {
+	if c := subtitleCoreText(s); c != "" {
+		return c
+	}
+	return strings.TrimSpace(s)
+}
+
+func dedupeFragLines(frags []styledFrag) []styledFrag {
+	out := make([]styledFrag, 0, len(frags))
+	seen := make(map[lineLang]map[string]int, 2)
+	for _, f := range frags {
+		t := strings.TrimSpace(f.text)
+		if t == "" {
+			out = append(out, f)
+			continue
+		}
+		fam := langFamily(f.lang)
+		key := lineKey(t)
+		if key == "" {
+			out = append(out, f)
+			continue
+		}
+		if seen[fam] == nil {
+			seen[fam] = make(map[string]int, len(frags))
+		}
+		idx, ok := seen[fam][key]
+		if !ok {
+			seen[fam][key] = len(out)
+			out = append(out, f)
+			continue
+		}
+		if len(t) > len(strings.TrimSpace(out[idx].text)) {
+			out[idx].text = f.text
+			out[idx].raw = ""
+		}
+	}
+	return out
+}
+
+func dedupeEntryLines(text string) string {
+	lines := splitRawSubtitleLines(text)
+	if len(lines) <= 1 {
+		return strings.TrimSpace(text)
+	}
+	sep := subtitleLineSep(text)
+	kept := make([]string, 0, len(lines))
+	seen := make(map[string]int, len(lines))
+	for _, line := range lines {
+		t := strings.TrimSpace(line)
+		if t == "" {
+			continue
+		}
+		key := lineKey(t)
+		if key != "" {
+			if idx, ok := seen[key]; ok {
+				if len(t) > len(kept[idx]) {
+					kept[idx] = t
+				}
+				continue
+			}
+			seen[key] = len(kept)
+		}
+		kept = append(kept, t)
+	}
+	return strings.Join(kept, sep)
+}
+
 func sanitizeChineseFix(s string) string {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -797,12 +864,12 @@ func unitForeignText(u subtitleFixUnit) string {
 }
 
 func fragHasText(u subtitleFixUnit, text string) bool {
-	text = strings.TrimSpace(text)
-	if text == "" {
+	key := lineKey(text)
+	if key == "" {
 		return true
 	}
 	for _, f := range u.frags {
-		if strings.TrimSpace(f.text) == text {
+		if lineKey(f.text) == key {
 			return true
 		}
 	}
@@ -1021,7 +1088,7 @@ func renderFixUnit(u subtitleFixUnit) string {
 		return u.origText
 	}
 	var parts []string
-	for _, f := range u.frags {
+	for _, f := range dedupeFragLines(u.frags) {
 		t := strings.TrimSpace(f.text)
 		if t == "" {
 			continue
