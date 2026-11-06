@@ -2574,7 +2574,7 @@ func entriesAreBilingual(entries []SubtitleEntry) bool {
 	for _, e := range entries {
 		zh, en := false, false
 		for _, line := range splitRawSubtitleLines(e.Text) {
-			t := strings.TrimSpace(line)
+			t := strings.TrimSpace(stripAllTags(line))
 			if t == "" {
 				continue
 			}
@@ -2610,12 +2610,42 @@ func probeTrackBilingual(videoFile string, streamIndex int) bool {
 	return entriesAreBilingual(entries)
 }
 
-func firstBilingualTrack(videoFile string, tracks []subTrack) *subTrack {
+type trackProber struct {
+	videoFile string
+	cache     map[int]bool
+}
+
+func newTrackProber(videoFile string) *trackProber {
+	return &trackProber{videoFile: videoFile, cache: make(map[int]bool, 8)}
+}
+
+func (p *trackProber) bilingual(t subTrack) bool {
+	if v, ok := p.cache[t.streamIndex]; ok {
+		return v
+	}
+	v := probeTrackBilingual(p.videoFile, t.streamIndex)
+	p.cache[t.streamIndex] = v
+	return v
+}
+
+func (p *trackProber) firstMonolingual(tracks []subTrack) *subTrack {
 	for i := range tracks {
 		if !isTextSubCodec(tracks[i].codec) {
 			continue
 		}
-		if probeTrackBilingual(videoFile, tracks[i].streamIndex) {
+		if !p.bilingual(tracks[i]) {
+			return &tracks[i]
+		}
+	}
+	return nil
+}
+
+func (p *trackProber) firstBilingual(tracks []subTrack) *subTrack {
+	for i := range tracks {
+		if !isTextSubCodec(tracks[i].codec) {
+			continue
+		}
+		if p.bilingual(tracks[i]) {
 			return &tracks[i]
 		}
 	}
@@ -2687,9 +2717,24 @@ func (a *App) extractOneSubtitle(videoFile, saveDir string) bool {
 	}
 	enTrack := firstTextSubTrack(engTracks)
 
-	bilingualTrack := firstBilingualTrack(videoFile, simpTracks)
+	prober := newTrackProber(videoFile)
+	zhPool := simpTracks
+	if simplified == nil {
+		zhPool = tradTracks
+	}
+	zhSingle := prober.firstMonolingual(zhPool)
+	if zhSingle != nil {
+		if enSingle := prober.firstMonolingual(engTracks); enSingle != nil {
+			if a.extractBilingualMerged(videoFile, saveDir, *zhSingle, *enSingle) {
+				return true
+			}
+			a.log("warn", "双语合并失败，回退为提取单条字幕")
+		}
+	}
+
+	bilingualTrack := prober.firstBilingual(simpTracks)
 	if bilingualTrack == nil && simplified == nil {
-		bilingualTrack = firstBilingualTrack(videoFile, tradTracks)
+		bilingualTrack = prober.firstBilingual(tradTracks)
 	}
 	if bilingualTrack == nil && zhTrack != nil && enTrack != nil {
 		if a.extractBilingualMerged(videoFile, saveDir, *zhTrack, *enTrack) {
@@ -2826,36 +2871,83 @@ func (a *App) extractBilingualMerged(videoFile, saveDir string, zhTrack, enTrack
 	return true
 }
 
+func bilingualTextParts(text string) (zhParts, enParts []string) {
+	var lines []string
+	for _, ln := range splitRawSubtitleLines(text) {
+		t := strings.TrimSpace(stripAllTags(ln))
+		if t != "" {
+			lines = append(lines, t)
+		}
+	}
+	lines = dropConcatRedundantLines(lines)
+	zhSeen := make(map[string]bool, len(lines))
+	enSeen := make(map[string]bool, len(lines))
+	addZH := func(t string) {
+		k := subtitleCoreText(t)
+		if k == "" || zhSeen[k] {
+			return
+		}
+		zhSeen[k] = true
+		zhParts = append(zhParts, t)
+	}
+	addEN := func(t string) {
+		k := subtitleCoreText(t)
+		if k == "" || enSeen[k] {
+			return
+		}
+		enSeen[k] = true
+		enParts = append(enParts, t)
+	}
+	for _, t := range lines {
+		switch classifyLineLang(t) {
+		case lineLangChinese:
+			addZH(t)
+		case lineLangMixed:
+			if mixedSplittable(t) {
+				z, f := splitMixedScript(t)
+				addZH(z)
+				addEN(f)
+			} else {
+				addZH(t)
+			}
+		case lineLangLatin, lineLangJapanese, lineLangKorean:
+			addEN(t)
+		case lineLangOther:
+			if hasExtendedLetter(t) {
+				addEN(t)
+			}
+		}
+	}
+	return zhParts, enParts
+}
+
 func mergeBilingualSRT(zhEntries, enEntries []SubtitleEntry) string {
 	type span struct {
 		start, end float64
-		text       string
+		parts      []string
 	}
 	ens := make([]span, 0, len(enEntries))
 	for _, e := range enEntries {
-		t := strings.TrimSpace(strings.ReplaceAll(e.Text, "\n", " "))
-		if t == "" {
+		_, parts := bilingualTextParts(e.Text)
+		if len(parts) == 0 {
 			continue
 		}
 		s, en := parseClockSec(e.Start), parseClockSec(e.End)
 		if en < s {
 			s, en = en, s
 		}
-		ens = append(ens, span{s, en, t})
+		ens = append(ens, span{s, en, parts})
 	}
 
 	var sb strings.Builder
 	idx := 0
 	for _, z := range zhEntries {
-		zhText := strings.TrimSpace(z.Text)
-		if zhText == "" {
-			continue
-		}
+		zhParts, zhEn := bilingualTextParts(z.Text)
 		zs, ze := parseClockSec(z.Start), parseClockSec(z.End)
 		if ze < zs {
 			zs, ze = ze, zs
 		}
-		var zhParts, enParts []string
+		var enParts []string
 		seen := make(map[string]bool, len(ens)+2)
 		addEN := func(t string) {
 			key := lineKey(t)
@@ -2865,16 +2957,8 @@ func mergeBilingualSRT(zhEntries, enEntries []SubtitleEntry) string {
 			seen[key] = true
 			enParts = append(enParts, t)
 		}
-		for _, ln := range splitRawSubtitleLines(zhText) {
-			t := strings.TrimSpace(ln)
-			if t == "" {
-				continue
-			}
-			if looksForeignSubtitle(t) {
-				addEN(t)
-				continue
-			}
-			zhParts = append(zhParts, t)
+		for _, t := range zhEn {
+			addEN(t)
 		}
 		for _, en := range ens {
 			ov := math.Min(ze, en.end) - math.Max(zs, en.start)
@@ -2885,7 +2969,12 @@ func mergeBilingualSRT(zhEntries, enEntries []SubtitleEntry) string {
 			if dur > 0 && ov < 0.5*dur {
 				continue
 			}
-			addEN(en.text)
+			for _, t := range en.parts {
+				addEN(t)
+			}
+		}
+		if len(zhParts) == 0 && len(enParts) == 0 {
+			continue
 		}
 		idx++
 		sb.WriteString(formatSRTEntry(idx, zs, ze, joinBilingual(strings.Join(zhParts, "\n"), strings.Join(enParts, " "))))
@@ -2980,6 +3069,7 @@ func (a *App) cleanExtractedSubtitle(filePath string) {
 		"encoded by", "downloaded from", "brought to you",
 		"字幕组", "字幕网", "字幕站", "翻译:", "翻译：", "校对:", "校对：",
 		"时间轴:", "时间轴：", "后期:", "后期：", "压制:", "压制：",
+		"荣誉出品", "本影片由", "更多精彩影视",
 	}
 	for i := range entries {
 		text := entries[i].Text
@@ -8257,6 +8347,7 @@ func cjkRuneCount(s string) int {
 }
 
 func looksForeignSubtitle(s string) bool {
+	s = stripAllTags(s)
 	hasLetter := false
 	for _, r := range s {
 		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') {

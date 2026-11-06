@@ -8,8 +8,8 @@ import (
 )
 
 var (
-	AppVersion = "1.6.65"
-	BuildTime  = "2026年11月1日"
+	AppVersion = "1.6.68"
+	BuildTime  = "2026年11月6日"
 )
 
 type AppInfo struct {

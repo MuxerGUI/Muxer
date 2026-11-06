@@ -697,6 +697,95 @@ func dedupeFragLines(frags []styledFrag) []styledFrag {
 			out[idx].raw = ""
 		}
 	}
+	return dropConcatRedundantFrags(out)
+}
+
+func concatRedundantDrop(keys []string, mixed []bool) []bool {
+	drop := make([]bool, len(keys))
+	if len(keys) < 2 {
+		return drop
+	}
+	for i := range keys {
+		if !mixed[i] || keys[i] == "" {
+			continue
+		}
+		var fwd, rev strings.Builder
+		for j := range keys {
+			if j != i {
+				fwd.WriteString(keys[j])
+			}
+		}
+		for j := len(keys) - 1; j >= 0; j-- {
+			if j != i {
+				rev.WriteString(keys[j])
+			}
+		}
+		if keys[i] == fwd.String() || keys[i] == rev.String() {
+			drop[i] = true
+		}
+	}
+	return drop
+}
+
+func dropConcatRedundantLines(lines []string) []string {
+	if len(lines) < 2 {
+		return lines
+	}
+	keys := make([]string, len(lines))
+	mixed := make([]bool, len(lines))
+	for i, l := range lines {
+		t := strings.TrimSpace(l)
+		keys[i] = subtitleCoreText(t)
+		mixed[i] = classifyLineLang(stripAllTags(t)) == lineLangMixed
+	}
+	drop := concatRedundantDrop(keys, mixed)
+	hit := false
+	for _, d := range drop {
+		if d {
+			hit = true
+			break
+		}
+	}
+	if !hit {
+		return lines
+	}
+	out := make([]string, 0, len(lines))
+	for i, l := range lines {
+		if !drop[i] {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+func dropConcatRedundantFrags(frags []styledFrag) []styledFrag {
+	if len(frags) < 2 {
+		return frags
+	}
+	keys := make([]string, len(frags))
+	mixed := make([]bool, len(frags))
+	for i, f := range frags {
+		t := strings.TrimSpace(f.text)
+		keys[i] = subtitleCoreText(t)
+		mixed[i] = classifyLineLang(stripAllTags(t)) == lineLangMixed
+	}
+	drop := concatRedundantDrop(keys, mixed)
+	hit := false
+	for _, d := range drop {
+		if d {
+			hit = true
+			break
+		}
+	}
+	if !hit {
+		return frags
+	}
+	out := make([]styledFrag, 0, len(frags))
+	for i, f := range frags {
+		if !drop[i] {
+			out = append(out, f)
+		}
+	}
 	return out
 }
 
@@ -725,7 +814,7 @@ func dedupeEntryLines(text string) string {
 		}
 		kept = append(kept, t)
 	}
-	return strings.Join(kept, sep)
+	return strings.Join(dropConcatRedundantLines(kept), sep)
 }
 
 func sanitizeChineseFix(s string) string {
@@ -743,8 +832,12 @@ func sanitizeChineseFix(s string) string {
 		case lineLangChinese:
 			zh = append(zh, line)
 		case lineLangMixed:
-			if z, _ := splitMixedScript(line); z != "" {
-				zh = append(zh, z)
+			if mixedSplittable(line) {
+				if z, _ := splitMixedScript(line); z != "" {
+					zh = append(zh, z)
+				}
+			} else {
+				zh = append(zh, line)
 			}
 		}
 	}

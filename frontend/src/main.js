@@ -1701,22 +1701,30 @@ window.clearHistory = function () {
 }
 
 
+const MUXER_REPO_URL = 'https://github.com/MuxerGUI/Muxer'
+
 window.loadAppInfo = async function () {
   const box = document.getElementById('aboutInfo')
   if (!box) return
   let info
   try { info = await GetAppInfo() } catch (e) { box.textContent = '读取失败: ' + e; return }
   const rows = [
-    ['版本', info.version],
+    ['当前版本', info.version],
     ['构建时间', info.buildTime || '未知'],
     ['运行环境', `${info.os}/${info.arch} · Go ${info.goVersion}`],
     ['当前品牌', info.brandName || info.brandUrl ? `${info.brandName || '—'} · ${info.brandUrl || '—'}` : '未配置（白标模式）'],
     ['配置文件', info.hasKeysFile ? '已加载 keys.json' : '未使用 keys.json（分享版）'],
     ['程序路径', info.exePath],
   ]
-  box.innerHTML = rows.map(([k, v]) =>
+  const cells = rows.map(([k, v]) =>
     `<span class="info-key">${escapeHtml(k)}</span><span class="info-val">${escapeHtml(v)}</span>`
-  ).join('')
+  )
+  cells.push(
+    '<span class="info-key">官方仓库</span>' +
+    `<span class="info-val"><a class="info-link" href="#" title="${MUXER_REPO_URL}" ` +
+    `onclick="openLink('${MUXER_REPO_URL}');return false">GitHub</a></span>`
+  )
+  box.innerHTML = cells.join('')
 }
 
 window.checkUpdate = async function () {

@@ -427,6 +427,13 @@ body {
 .info-key { color: var(--info-key); font-weight: 500; }
 .info-val { color: var(--text); word-break: break-all; }
 #aboutInfo { margin-top: 4px; gap: 6px 10px; }
+.info-link {
+  color: var(--tab-accent); text-decoration: none;
+  font-weight: 500; cursor: pointer;
+  border-bottom: 1px solid transparent;
+  transition: border-color .12s ease, color .12s ease;
+}
+.info-link:hover { border-bottom-color: var(--tab-accent); }
 
 .meta-grid {
   display: grid; grid-template-columns: 72px 1fr;
